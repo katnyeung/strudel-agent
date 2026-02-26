@@ -1,0 +1,28 @@
+# Build Sequence — Minimal Techno
+
+steps:
+  - stage: foundation
+    description: "Four-on-the-floor kick — the foundation of techno"
+    code: |
+      $kick: sound("bd:3").beat("0,4,8,12",16).bank("RolandTR909").gain(0.7).lpf(3000)
+
+  - stage: bass
+    description: "Rolling bass with filter sweep"
+    code: |
+      $bass: note("C2 C2 C2 C2 ~ C2 C2 ~").sound("square").lpf(sine.range(200,800).slow(8)).gain(0.4)
+
+  - stage: groove
+    description: "Offbeat hi-hats — crisp and metallic"
+    code: |
+      $hat: sound("hh:2").beat("2,6,10,14",16).bank("RolandTR909").gain(0.25).hpf(5000)
+
+  - stage: clap
+    description: "Clap on 2 and 4 with short reverb tail"
+    code: |
+      $clap: sound("cp").beat("4,12",16).bank("RolandTR909").gain(0.4).room(0.3)
+
+  - stage: refine
+    description: "Add filter automation, delay, subtle variation"
+
+  - stage: variation
+    description: "Build-drop: introduce and remove elements for tension"

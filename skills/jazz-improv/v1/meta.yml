@@ -1,0 +1,19 @@
+id: jazz-improv
+name: Jazz Improv
+icon: "🎷"
+version: 1
+description: >
+  Walking bass, ii-V-I progressions, heavy swing, blue notes.
+  Small combo jazz — piano trio with occasional horn feel.
+  Tension, release, conversation.
+tempo:
+  min: 100
+  max: 140
+  default: 120
+tags:
+  - jazz
+  - swing
+  - improv
+  - bebop
+author: ambient-lofi-system
+created: 2025-02-26

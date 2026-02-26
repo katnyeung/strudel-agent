@@ -1,0 +1,19 @@
+id: lofi-dj
+name: Lo-fi DJ
+icon: "🎧"
+version: 1
+description: >
+  Lazy beats, warm chords, vinyl dust. Dusty drum machines,
+  detuned Rhodes, tape hiss aesthetic. Think late-night study
+  sessions and rainy windows.
+tempo:
+  min: 70
+  max: 85
+  default: 78
+tags:
+  - chill
+  - beats
+  - study
+  - ambient
+author: ambient-lofi-system
+created: 2025-02-26

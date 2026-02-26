@@ -1,0 +1,23 @@
+{
+  "name": "ambient-lofi",
+  "version": "0.1.0",
+  "description": "AI Music Copilot — Strudel live coding with evolving skills",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "start": "tsx src/server.ts",
+    "build": "tsc",
+    "reload-skills": "curl -s -X POST http://localhost:8080/api/skills/reload | jq"
+  },
+  "dependencies": {
+    "ws": "^8.18.0",
+    "yaml": "^2.6.0",
+    "dotenv": "^16.4.0"
+  },
+  "devDependencies": {
+    "@types/ws": "^8.5.13",
+    "@types/node": "^22.0.0",
+    "typescript": "^5.7.0",
+    "tsx": "^4.19.0"
+  }
+}

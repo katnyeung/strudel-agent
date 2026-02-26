@@ -1,0 +1,19 @@
+id: ambient-drift
+name: Ambient Drift
+icon: "🌊"
+version: 1
+description: >
+  Generative textures, slow evolution, spacious. Brian Eno-inspired
+  ambient landscapes that breathe and shift like weather.
+  Silence is an instrument.
+tempo:
+  min: 50
+  max: 70
+  default: 60
+tags:
+  - ambient
+  - generative
+  - meditative
+  - drone
+author: ambient-lofi-system
+created: 2025-02-26

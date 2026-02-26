@@ -1,0 +1,28 @@
+# Build Sequence — Ambient Drift
+
+steps:
+  - stage: foundation
+    description: "Start with a long evolving pad — the atmosphere"
+    code: |
+      $pad: note("C4 E4 G4").sound("supersaw").slow(8).lpf(sine.range(300,1500).slow(16)).room(0.9).gain(0.25)
+
+  - stage: texture
+    description: "Add a second texture with different movement speed"
+    code: |
+      $drift: note("G4 C5 E5").sound("sine").slow(12).gain(0.15).delay(0.6).delaytime(0.75).room(0.8)
+
+  - stage: bass
+    description: "Add deep sub drone — felt not heard"
+    code: |
+      $drone: note("C1").sound("sine").slow(16).lpf(150).gain(0.3)
+
+  - stage: rhythm
+    description: "Add extremely subtle rhythmic element — barely there"
+    code: |
+      $dust: s("hh*4").gain(0.08).degradeBy(0.6).lpf(2000).room(0.7).pan(rand)
+
+  - stage: refine
+    description: "Modulate everything slowly — nothing should be static"
+
+  - stage: variation
+    description: "Shift tonality glacially, add or remove layers over long periods"

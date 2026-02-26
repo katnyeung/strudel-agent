@@ -1,0 +1,19 @@
+id: minimal-techno
+name: Minimal Techno
+icon: "⚡"
+version: 1
+description: >
+  Hypnotic, repetitive, slow build. Four-on-the-floor kick,
+  sparse elements, filter sweeps. Tension through repetition
+  and the smallest of changes.
+tempo:
+  min: 120
+  max: 128
+  default: 124
+tags:
+  - techno
+  - minimal
+  - hypnotic
+  - dance
+author: ambient-lofi-system
+created: 2025-02-26

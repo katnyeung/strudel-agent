@@ -1,0 +1,18 @@
+id: soul-keys
+name: Soul Keys
+icon: "🎹"
+version: 1
+description: >
+  Rhodes, gospel chords, warm groove. Neo-soul and R&B keys with
+  rich voicings, walking bass, and that Sunday morning feel.
+tempo:
+  min: 75
+  max: 95
+  default: 85
+tags:
+  - soul
+  - keys
+  - rhodes
+  - gospel
+author: ambient-lofi-system
+created: 2025-02-26
