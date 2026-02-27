@@ -29,11 +29,12 @@ export interface BuildStep {
 
 /** Browser → Server */
 export interface WsIncoming {
-  type: 'select_skill' | 'command' | 'code_edit' | 'rate' | 'stop';
+  type: 'select_skill' | 'command' | 'code_edit' | 'rate' | 'stop' | 'set_evolve_interval' | 'evolve_now';
   skillId?: string;
   command?: string;
   currentCode?: string;
   rating?: number;           // 1-5
+  interval?: number;         // evolution interval in ms (10000-120000)
 }
 
 /** Server → Browser */
@@ -72,7 +73,9 @@ export interface Session {
   lastHumanTime: number | null;    // Date.now() timestamp
   lastEvolveTime: number | null;
   evolveTimer: ReturnType<typeof setTimeout> | null;
+  evolveInterval: number;    // ms between evolutions (default 60000)
   humanQueue: HumanInput[];
+  history: ChatMessage[];    // conversation history for LLM context
 }
 
 export interface HumanInput {

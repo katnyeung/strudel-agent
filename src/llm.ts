@@ -24,6 +24,9 @@ export function createLlm(config: LlmConfig): LlmGateway {
   if (provider === 'anthropic') {
     return anthropicGateway(config);
   }
+  if (provider === 'gemini') {
+    return geminiGateway(config);
+  }
   return openAiCompatibleGateway(config);
 }
 
@@ -55,6 +58,49 @@ function anthropicGateway(config: LlmConfig): LlmGateway {
 
       const data = await res.json() as any;
       return data.content[0]?.text ?? '';
+    },
+  };
+}
+
+// ─── Google Gemini Native ─────────────────────────
+
+function geminiGateway(config: LlmConfig): LlmGateway {
+  const baseUrl = config.baseUrl || 'https://generativelanguage.googleapis.com';
+
+  return {
+    provider: 'gemini',
+    async chat(systemPrompt, messages, maxTokens = 2048) {
+      const contents = messages.map(m => ({
+        role: m.role === 'assistant' ? 'model' : 'user',
+        parts: [{ text: m.content }],
+      }));
+
+      const res = await fetch(
+        `${baseUrl}/v1beta/models/${config.model}:generateContent`,
+        {
+          method: 'POST',
+          headers: {
+            'content-type': 'application/json',
+            'x-goog-api-key': config.apiKey,
+          },
+          body: JSON.stringify({
+            contents,
+            systemInstruction: { parts: [{ text: systemPrompt }] },
+            generationConfig: {
+              maxOutputTokens: maxTokens,
+              temperature: 0.85,
+            },
+          }),
+        },
+      );
+
+      if (!res.ok) {
+        const err = await res.text();
+        throw new Error(`Gemini ${res.status}: ${err}`);
+      }
+
+      const data = await res.json() as any;
+      return data.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
     },
   };
 }

@@ -62,6 +62,17 @@ Rhythm is the pattern of sounds and silences in time. It's the skeleton of music
   - i-iv-v (Cm → Fm → Gm) — minor loop, lo-fi/ambient.
 - **Slow chord movement**: change chords every 2-4 bars for ambient/lo-fi. Every bar for jazz.
 
+### Chord probability — what real songs do
+Based on analysis of thousands of popular songs, here's what chords typically follow each other. Use this to make progressions that feel natural or deliberately surprising:
+
+- After **I**: IV (22%), V (19%), vi (15%), ii (8%). The I→IV→V→I cycle is the backbone of pop.
+- After **IV**: I (32%), V (29%), vi (10%). The IV chord almost always resolves to I or V.
+- After **V**: I (44%), vi (14%), IV (11%). The V→I resolution is the strongest pull in music.
+- After **vi**: IV (26%), V (18%), ii (12%), I (11%). Minor chords love moving to IV.
+- After **ii**: V (48%), IV (14%), I (10%). The ii→V is by far the most common two-chord motion.
+
+**Using this**: Follow the high-probability paths for "safe" progressions. Deliberately pick low-probability paths (3-5%) for interesting, unexpected movement. Genre matters — jazz uses ii→V→I constantly, while lo-fi often loops i→iv or i→VI→III→VII.
+
 ### Bass and root movement
 - The **bass note** anchors the harmony. Usually plays the root of the chord.
 - Walking bass: moves stepwise through chord tones. Keeps energy flowing.
@@ -74,8 +85,12 @@ Rhythm is the pattern of sounds and silences in time. It's the skeleton of music
 - Add elements one at a time. Each new voice should add something the track is missing.
 - Order of importance varies by genre:
   - Techno: kick → bass → hats → clap → synth stab
+  - House: kick → hats → bass → clap → vocal chop
   - Lo-fi/Soul: chords → bass → kick → snare → texture
   - Ambient: pad → texture → drone → subtle rhythm
+  - DnB/Jungle: break → bass → pad → melody
+  - Trip Hop: drums → bass → pad → melody → texture
+  - Boom Bap: drums → bass → sample/melody → texture
 
 ### Tension and release
 - **Build** tension by: adding layers, opening filters, increasing density, adding dissonance.

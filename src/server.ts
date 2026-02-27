@@ -5,7 +5,7 @@ import path from 'node:path';
 import { WebSocketServer, WebSocket } from 'ws';
 import { createLlm } from './llm.js';
 import { loadSkills, allSkills, getSkill, skillVersions } from './skills.js';
-import { startSession, stopSession, onSelectSkill, onCommand, onCodeEdit, onRate } from './agent.js';
+import { startSession, stopSession, onSelectSkill, onCommand, onCodeEdit, onRate, onSetEvolveInterval, onEvolveNow } from './agent.js';
 import type { WsIncoming, WsOutgoing } from './types.js';
 
 // ─── Config ───────────────────────────────────────
@@ -101,6 +101,12 @@ wss.on('connection', (ws: WebSocket) => {
           break;
         case 'rate':
           onRate(id, msg.rating ?? 3);
+          break;
+        case 'set_evolve_interval':
+          if (msg.interval) onSetEvolveInterval(id, msg.interval);
+          break;
+        case 'evolve_now':
+          onEvolveNow(id, llm);
           break;
         case 'stop':
           stopSession(id);
