@@ -94,6 +94,29 @@
   .rate-btn { background: var(--surface2); border: 1px solid var(--border); width: 28px; height: 28px; border-radius: 6px; cursor: pointer; font-size: 14px; }
   .rate-btn:hover { border-color: var(--accent); }
 
+  /* ── Voice Ratings ── */
+  .voice-ratings { border-bottom: 1px solid var(--border); }
+  .voice-ratings-header {
+    display: flex; align-items: center; padding: 6px 16px; cursor: pointer;
+    font-size: 11px; color: var(--dim); user-select: none;
+  }
+  .voice-ratings-header:hover { color: var(--text); }
+  .voice-ratings-list { padding: 4px 16px 8px; display: flex; flex-direction: column; gap: 4px; }
+  .voice-row {
+    display: flex; align-items: center; gap: 6px; font-size: 11px;
+  }
+  .voice-row .voice-name { color: var(--accent); min-width: 60px; font-weight: 600; }
+  .voice-row .voice-type { color: var(--dim); font-size: 10px; min-width: 48px; }
+  .voice-row .vr-btn {
+    width: 24px; height: 24px; border-radius: 4px; border: 1px solid var(--border);
+    background: var(--surface2); cursor: pointer; font-size: 12px; padding: 0;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .voice-row .vr-btn:hover { border-color: var(--accent); }
+  .voice-row .vr-btn.active-bad { border-color: var(--red); background: #f8717122; }
+  .voice-row .vr-btn.active-ok { border-color: var(--orange); background: #fb923c22; }
+  .voice-row .vr-btn.active-good { border-color: var(--green); background: #4ade8022; }
+
   /* ── Chat Input ── */
   .chat-input { display: flex; gap: 8px; padding: 12px 16px; border-top: 1px solid var(--border); background: var(--surface2); }
   .chat-input input {
@@ -118,7 +141,8 @@
   <div class="repl-panel">
     <div class="repl-header">
       <h1>🎵 Ambient Lo-fi</h1>
-      <button class="stop-btn" onclick="stopAll()">⏹ Stop Agent</button>
+      <button class="stop-btn" onclick="syncCode()" title="Send your edits to the agent">✔ Sync</button>
+      <button class="stop-btn" onclick="stopAll()">⏹ Stop</button>
       <span class="status" id="statusText">Disconnected</span>
     </div>
     <div class="editor-wrap">
@@ -158,6 +182,13 @@
       <button class="rate-btn" onclick="rate(3)" title="OK">👌</button>
       <button class="rate-btn" onclick="rate(4)" title="Good">👍</button>
       <button class="rate-btn" onclick="rate(5)" title="Love it">🔥</button>
+    </div>
+
+    <div class="voice-ratings" id="voiceRatings">
+      <div class="voice-ratings-header" onclick="toggleVoiceRatings()">
+        <span id="voiceRatingsToggle">Rate voices ▸</span>
+      </div>
+      <div class="voice-ratings-list" id="voiceRatingsList" style="display:none;"></div>
     </div>
 
     <div class="agent-log" id="agentLog"></div>
@@ -239,6 +270,17 @@ window.strudelStop = function() {
   isPlaying = false;
 };
 
+window.syncCode = function() {
+  const code = getCurrentCode();
+  if (!code) return;
+  lastCode = code;
+  if (ws && ws.readyState === 1) {
+    ws.send(JSON.stringify({ type: 'code_edit', currentCode: code }));
+  }
+  addLog('Synced your edits — agent will use this as the latest version.', 'info');
+  if (voiceRatingsOpen) refreshVoiceList();
+};
+
 window.stopAll = function() {
   strudelStop();
   if (ws && ws.readyState === 1) ws.send(JSON.stringify({ type: 'stop' }));
@@ -290,6 +332,9 @@ function handleMessage(msg) {
       if (msg.code) {
         lastCode = msg.code; // prevent echo back to server
         window.strudelPlay(msg.code).catch(e => addLog('Strudel error: ' + e.message, 'error'));
+        // Reset voice ratings on each code update — old ratings are stale
+        Object.keys(activeVoiceRatings).forEach(k => delete activeVoiceRatings[k]);
+        if (voiceRatingsOpen) refreshVoiceList();
       }
       if (msg.message) addLog(msg.message, 'code-update', msg.phase);
       break;
@@ -363,6 +408,81 @@ function evolveNow() {
   if (ws && ws.readyState === 1) {
     ws.send(JSON.stringify({ type: 'evolve_now' }));
   }
+}
+
+// ══════════════════════════════════════════════════
+// Voice Ratings
+// ══════════════════════════════════════════════════
+
+const VOICE_NAME_TYPE = {
+  kick:'drum',bd:'drum',snare:'drum',sd:'drum',hat:'drum',hh:'drum',
+  perc:'drum',rim:'drum',clap:'drum',cymbal:'drum',tom:'drum',
+  chord:'synth',pad:'synth',keys:'synth',piano:'synth',
+  melody:'melodic',lead:'melodic',arp:'melodic',pluck:'melodic',
+  bass:'bass',sub:'bass',fx:'fx',noise:'fx',ambient:'fx',
+};
+
+let voiceRatingsOpen = false;
+const activeVoiceRatings = {};  // voiceName → rating
+
+function toggleVoiceRatings() {
+  voiceRatingsOpen = !voiceRatingsOpen;
+  document.getElementById('voiceRatingsList').style.display = voiceRatingsOpen ? 'flex' : 'none';
+  document.getElementById('voiceRatingsToggle').textContent = voiceRatingsOpen ? 'Rate voices ▾' : 'Rate voices ▸';
+  if (voiceRatingsOpen) refreshVoiceList();
+}
+
+function parseVoicesClient(code) {
+  if (!code) return [];
+  const voices = [];
+  for (const m of code.matchAll(/\$(\w+):/g)) {
+    const name = m[1];
+    const lower = name.toLowerCase();
+    let type = 'unknown';
+    for (const [k, t] of Object.entries(VOICE_NAME_TYPE)) {
+      if (lower.includes(k)) { type = t; break; }
+    }
+    voices.push({ name, type });
+  }
+  return voices;
+}
+
+function refreshVoiceList() {
+  const list = document.getElementById('voiceRatingsList');
+  const code = getCurrentCode();
+  const voices = parseVoicesClient(code);
+  if (voices.length === 0) {
+    list.innerHTML = '<div style="font-size:11px;color:var(--dim)">No voices yet</div>';
+    return;
+  }
+  // Remove stale ratings
+  const names = new Set(voices.map(v => v.name));
+  for (const k of Object.keys(activeVoiceRatings)) {
+    if (!names.has(k)) delete activeVoiceRatings[k];
+  }
+  list.innerHTML = voices.map(v => {
+    const cur = activeVoiceRatings[v.name] || 0;
+    return `<div class="voice-row">
+      <span class="voice-name">$${v.name}</span>
+      <span class="voice-type">${v.type}</span>
+      <button class="vr-btn ${cur===1?'active-bad':''}" onclick="rateVoice('${v.name}',1)" title="Bad">👎</button>
+      <button class="vr-btn ${cur===3?'active-ok':''}" onclick="rateVoice('${v.name}',3)" title="OK">👌</button>
+      <button class="vr-btn ${cur===5?'active-good':''}" onclick="rateVoice('${v.name}',5)" title="Good">👍</button>
+    </div>`;
+  }).join('');
+}
+
+function rateVoice(name, rating) {
+  // Toggle off if same rating clicked again
+  if (activeVoiceRatings[name] === rating) {
+    delete activeVoiceRatings[name];
+  } else {
+    activeVoiceRatings[name] = rating;
+  }
+  if (ws && ws.readyState === 1) {
+    ws.send(JSON.stringify({ type: 'rate', rating, voiceName: name }));
+  }
+  refreshVoiceList();
 }
 
 function addLog(message, type, phase, candidateNum, candidateTotal) {

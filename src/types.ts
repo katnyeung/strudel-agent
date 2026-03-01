@@ -34,6 +34,7 @@ export interface WsIncoming {
   command?: string;
   currentCode?: string;
   rating?: number;           // 1-5
+  voiceName?: string;        // optional: rate a specific voice (e.g. "hat")
   interval?: number;         // evolution interval in ms (10000-120000)
 }
 
@@ -74,6 +75,7 @@ export interface Session {
   lastEvolveTime: number | null;
   evolveTimer: ReturnType<typeof setTimeout> | null;
   evolveInterval: number;    // ms between evolutions (default 60000)
+  voiceRatings: Map<string, number>;  // per-voice ratings (voice name → 1-5)
   humanQueue: HumanInput[];
   history: ChatMessage[];    // conversation history for LLM context
 }
@@ -97,4 +99,52 @@ export interface LlmConfig {
 export interface ChatMessage {
   role: 'user' | 'assistant';
   content: string;
+}
+
+// ═══════════════════════════════════════════════════
+// Neon event logging types
+// ═══════════════════════════════════════════════════
+
+export interface ParsedVoice {
+  name: string;
+  code: string;
+  type?: 'drum' | 'synth' | 'melodic' | 'bass' | 'fx' | 'unknown';
+}
+
+export interface EvolutionEvent {
+  session_id: string;
+  phase: string;
+  move_type?: string;
+  code_before?: string;
+  code_after: string;
+  voices?: ParsedVoice[];
+  voice_count?: number;
+  reason?: string;
+}
+
+export interface CommandEvent {
+  session_id: string;
+  command: string;
+  code_before?: string;
+  code_after?: string;
+}
+
+export interface RatingEvent {
+  session_id: string;
+  rating: number;
+  code_snapshot?: string;
+  voice_name?: string;
+  voice_type?: string;
+}
+
+export interface SessionRecord {
+  id: string;
+  skill_id?: string;
+  skill_name?: string;
+}
+
+export interface SessionEndStats {
+  total_evolves: number;
+  avg_rating?: number;
+  final_code?: string;
 }

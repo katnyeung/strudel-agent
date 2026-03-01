@@ -69,7 +69,7 @@ function geminiGateway(config: LlmConfig): LlmGateway {
 
   return {
     provider: 'gemini',
-    async chat(systemPrompt, messages, maxTokens = 2048) {
+    async chat(systemPrompt, messages, maxTokens = 4096) {
       const contents = messages.map(m => ({
         role: m.role === 'assistant' ? 'model' : 'user',
         parts: [{ text: m.content }],

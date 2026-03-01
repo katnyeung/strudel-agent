@@ -89,7 +89,7 @@ export class MusicTheory {
       'VI': this.getNote(key, 9),
       'VII': this.getNote(key, 11),
       'bVII': this.getNote(key, 10),
-      'IM7': `${key}maj7`
+      'IM7': `${key}M7`
     };
 
     return progression
@@ -104,8 +104,12 @@ export class MusicTheory {
    * @returns Transposed note name
    */
   getNote(root: string, semitones: number): string {
-    const noteNames = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
-    const rootIndex = noteNames.indexOf(root.toUpperCase());
+    // Use flats for chord roots — Strudel's chord parser doesn't handle sharps well
+    const noteNames = ['C', 'Db', 'D', 'Eb', 'E', 'F', 'Gb', 'G', 'Ab', 'A', 'Bb', 'B'];
+    const sharpNames = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+    // Accept both sharp and flat input
+    let rootIndex = noteNames.indexOf(root);
+    if (rootIndex === -1) rootIndex = sharpNames.indexOf(root.toUpperCase());
     if (rootIndex === -1) return root;
     return noteNames[(rootIndex + semitones) % 12];
   }
