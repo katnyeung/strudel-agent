@@ -1,7 +1,9 @@
 import type { LlmGateway } from './llm.js';
-import type { Skill, Session, HumanInput, WsOutgoing, ChatMessage } from './types.js';
+import type { Skill, BuildStep, Session, HumanInput, WsOutgoing, ChatMessage } from './types.js';
 import { allSkills, getSkill, getBaseKnowledge } from './skills.js';
 import { MusicTheory } from './music-theory.js';
+import * as neon from './db/neon.js';
+import { parseVoices, countVoices } from './db/voice-parser.js';
 
 const theory = new MusicTheory();
 
@@ -36,10 +38,13 @@ export function startSession(id: string, send: (msg: WsOutgoing) => void): void 
     lastEvolveTime: null,
     evolveTimer: null,
     evolveInterval: EVOLVE_INTERVAL,
+    voiceRatings: new Map(),
     humanQueue: [],
     history: [],
   };
   sessions.set(id, session);
+
+  neon.startSession({ id }).catch(e => console.error('[neon]', e.message));
 
   send({
     type: 'skills_list',
@@ -53,6 +58,12 @@ export function startSession(id: string, send: (msg: WsOutgoing) => void): void 
 
 export function stopSession(id: string): void {
   const s = sessions.get(id);
+  if (s) {
+    neon.endSession(id, {
+      total_evolves: s.evolveCount,
+      final_code: s.currentCode || undefined,
+    }).catch(e => console.error('[neon]', e.message));
+  }
   if (s?.evolveTimer) clearTimeout(s.evolveTimer);
   sessions.delete(id);
 }
@@ -73,6 +84,7 @@ export function onSelectSkill(id: string, skillId: string, llm: LlmGateway): voi
 
   s.skill = skill;
   s.history = [];  // reset history for new skill
+  neon.updateSessionSkill(id, skill.id, skill.name).catch(e => console.error('[neon]', e.message));
   s.send({
     type: 'agent_log', phase: 'bootstrap',
     message: `${skill.icon} ${skill.name} — starting up...`,
@@ -108,16 +120,34 @@ export function onCodeEdit(id: string, code: string): void {
   }
 }
 
-export function onRate(id: string, rating: number): void {
+export function onRate(id: string, rating: number, voiceName?: string): void {
   const s = sessions.get(id);
   if (!s) return;
-  s.lastRating = rating;
-  s.send({
-    type: 'agent_log',
-    message: rating >= 4 ? `Rated ${rating}/5 — keeping this direction, subtle refinements ahead.`
-           : rating <= 2 ? `Rated ${rating}/5 — got it, next evolution will make a big change.`
-           : `Rated ${rating}/5 — noted, will keep refining.`,
-  });
+
+  if (voiceName) {
+    // Per-voice rating
+    s.voiceRatings.set(voiceName, rating);
+    const voices = parseVoices(s.currentCode);
+    const voice = voices.find(v => v.name === voiceName);
+    neon.logRating({ session_id: id, rating, code_snapshot: s.currentCode || undefined, voice_name: voiceName, voice_type: voice?.type }).catch(e => console.error('[neon]', e.message));
+    const emoji = rating <= 2 ? '👎' : rating >= 4 ? '👍' : '👌';
+    s.send({
+      type: 'agent_log',
+      message: rating <= 2 ? `Rated $${voiceName} ${emoji} — will target this voice next evolution.`
+             : rating >= 4 ? `Rated $${voiceName} ${emoji} — keeping this voice as-is.`
+             : `Rated $${voiceName} ${emoji} — noted.`,
+    });
+  } else {
+    // Overall rating (unchanged behavior)
+    s.lastRating = rating;
+    neon.logRating({ session_id: id, rating, code_snapshot: s.currentCode || undefined }).catch(e => console.error('[neon]', e.message));
+    s.send({
+      type: 'agent_log',
+      message: rating >= 4 ? `Rated ${rating}/5 — keeping this direction, subtle refinements ahead.`
+             : rating <= 2 ? `Rated ${rating}/5 — got it, next evolution will make a big change.`
+             : `Rated ${rating}/5 — noted, will keep refining.`,
+    });
+  }
 }
 
 export function onSetEvolveInterval(id: string, intervalMs: number): void {
@@ -172,6 +202,8 @@ setcps(${cps})
       s.currentCode = code;
       addHistory(s, 'user', prompt);
       addHistory(s, 'assistant', `REASON: ${reason}\nCODE:\n${code}`);
+      const voices = parseVoices(code);
+      neon.logEvolution({ session_id: s.id, phase: 'bootstrap', code_after: code, voices, voice_count: voices.length, reason }).catch(e => console.error('[neon]', e.message));
       s.send({
         type: 'code_update', code, phase: 'bootstrap',
         message: `${skill.icon} ${reason || `Fresh ${skill.name} beat — evolution will build it up.`}`,
@@ -182,6 +214,8 @@ setcps(${cps})
       const firstVoice = foundation?.code ? foundation.code.trim() : '$kick: s("bd").gain(0.6)';
       const startCode = `setcps(${cps})\n${firstVoice}`;
       s.currentCode = startCode;
+      const voices = parseVoices(startCode);
+      neon.logEvolution({ session_id: s.id, phase: 'bootstrap', code_after: startCode, voices, voice_count: voices.length, reason: 'Fallback — LLM returned no valid code' }).catch(e => console.error('[neon]', e.message));
       s.send({
         type: 'code_update', code: startCode, phase: 'bootstrap',
         message: `${skill.icon} Starting simple — evolution will build it up.`,
@@ -194,6 +228,8 @@ setcps(${cps})
     const firstVoice = foundation?.code ? foundation.code.trim() : '$kick: s("bd").gain(0.6)';
     const startCode = `setcps(${cps})\n${firstVoice}`;
     s.currentCode = startCode;
+    const voices = parseVoices(startCode);
+    neon.logEvolution({ session_id: s.id, phase: 'bootstrap', code_after: startCode, voices, voice_count: voices.length, reason: 'Fallback — LLM error' }).catch(e => console.error('[neon]', e.message));
     s.send({
       type: 'code_update', code: startCode, phase: 'bootstrap',
       message: `${skill.icon} Starting simple — evolution will build it up.`,
@@ -252,17 +288,31 @@ async function evolutionTick(s: Session, llm: LlmGateway): Promise<void> {
     ? `\nListener feedback: rated ${s.lastRating}/5${s.lastRating <= 2 ? ' — they don\'t like the current direction, make a significant change' : s.lastRating >= 4 ? ' — they like this direction, keep the vibe' : ''}\n`
     : '';
 
+  // Build per-voice feedback context
+  let voiceCtx = '';
+  if (s.voiceRatings.size > 0) {
+    const lines: string[] = [];
+    for (const [name, vr] of s.voiceRatings) {
+      if (vr <= 2) lines.push(`$${name}: disliked — change or remove it`);
+      else if (vr >= 4) lines.push(`$${name}: liked — keep it`);
+      else lines.push(`$${name}: neutral`);
+    }
+    voiceCtx = `\nPer-voice feedback:\n${lines.join('\n')}\n`;
+  }
+
   const prompt = `Current code:
 ${s.currentCode}
 
 Musician move: ${move}
-${theoryCtx}${ratingCtx}
+${theoryCtx}${ratingCtx}${voiceCtx}
 Apply this ONE change. You may add a new $: voice, modify an existing voice, or tweak parameters. Keep all other voices intact.
 
 Reply in this format:
 REASON: (one sentence — your musical reasoning)
 CODE:
 (complete updated Strudel code — setcps line + all $: voices)`;
+
+  const codeBefore = s.currentCode;
 
   try {
     const messages: ChatMessage[] = [...getHistory(s), { role: 'user', content: prompt }];
@@ -275,6 +325,9 @@ CODE:
       s.humanEdited = false;
       addHistory(s, 'user', prompt);
       addHistory(s, 'assistant', `REASON: ${reason}\nCODE:\n${code}`);
+      const voices = parseVoices(code);
+      cleanStaleVoiceRatings(s, voices);
+      neon.logEvolution({ session_id: s.id, phase: 'evolving', move_type: move, code_before: codeBefore, code_after: code, voices, voice_count: voices.length, reason }).catch(e => console.error('[neon]', e.message));
       s.send({
         type: 'code_update', code, phase: 'evolving',
         message: `🎵 ${reason || move}`,
@@ -288,6 +341,28 @@ CODE:
 }
 
 function pickEvolutionMove(s: Session): string {
+  // Priority 1: fix disliked voices (one per cycle)
+  for (const [name, vr] of s.voiceRatings) {
+    if (vr <= 2) {
+      s.voiceRatings.delete(name);
+      return `Replace or rework the $${name}: voice — the listener specifically dislikes it. Change its sound, rhythm, or remove it entirely.`;
+    }
+  }
+
+  // Priority 2: refine neutral-rated voices (~50% chance per cycle)
+  const neutralVoices = [...s.voiceRatings.entries()].filter(([, vr]) => vr === 3);
+  if (neutralVoices.length > 0 && Math.random() < 0.5) {
+    const [name] = neutralVoices[Math.floor(Math.random() * neutralVoices.length)];
+    s.voiceRatings.delete(name);
+    const refineMoves = [
+      `Refine the $${name}: voice — try a different rhythm pattern or timing`,
+      `Refine the $${name}: voice — change its sound/sample to something more interesting`,
+      `Refine the $${name}: voice — add or change its filter, effects, or modulation`,
+      `Refine the $${name}: voice — change its notes, pitch, or melodic pattern`,
+    ];
+    return refineMoves[Math.floor(Math.random() * refineMoves.length)];
+  }
+
   const rating = s.lastRating;
 
   const subtle = [
@@ -297,8 +372,6 @@ function pickEvolutionMove(s: Session): string {
     'Add space — add .room() or .delay() to one voice',
     'Add movement — add .pan(sine.slow(N)) or rand.range to one voice',
     'Refine dynamics — adjust .gain() between voices',
-    'Add visual flair — add .color() to voices that lack it, pick distinct colors per voice',
-    'Add a ._pianoroll() to one melodic voice (chord, melody, arp, bass) so the listener can see the notes inline',
   ];
 
   const bold = [
@@ -311,12 +384,12 @@ function pickEvolutionMove(s: Session): string {
   ];
 
   const dislike = [
-    'This isn\'t working — remove 1-2 voices and rebuild with a different approach',
     'Change the key or scale — shift the entire harmonic mood',
-    'Simplify drastically — strip down to 1-2 core voices and start fresh from there',
     'Replace the rhythm entirely — try a different drum pattern and groove',
     'Change the sound palette — swap synth sounds, samples, or banks on multiple voices',
     'Rethink the texture — change reverb, delay, filter approach across voices',
+    'Try a completely different instrument or tone — replace one voice with a new gm_ sound or synth type',
+    'Change the chord progression or melody — try new notes, different intervals, or a new harmonic idea',
   ];
 
   // Bad rating (1-2): drastic change, then reset rating so it doesn't repeat
@@ -371,12 +444,15 @@ CODE:
     const { reason, code: newCode } = parseReasonCode(result);
 
     if (newCode) {
+      const codeBefore = code;
       s.currentCode = newCode;
       s.lastEvolveTime = Date.now();
       s.lastHumanTime = Date.now();
       s.humanEdited = false;
       addHistory(s, 'user', prompt);
       addHistory(s, 'assistant', `REASON: ${reason}\nCODE:\n${newCode}`);
+      cleanStaleVoiceRatings(s, parseVoices(newCode));
+      neon.logCommand({ session_id: s.id, command: input.command, code_before: codeBefore, code_after: newCode }).catch(e => console.error('[neon]', e.message));
       s.send({
         type: 'code_update', code: newCode, phase: 'responding',
         message: `💬 ${reason || 'Applied: ' + truncate(input.command, 60)}`,
@@ -394,7 +470,7 @@ CODE:
 
 function buildSystemPrompt(skill: Skill): string {
   const examples = skill.buildSequence
-    .filter(s => s.code)
+    .filter((s): s is BuildStep & { code: string } => !!s.code)
     .map(s => `// ${s.description}\n${s.code.trim()}`)
     .join('\n\n');
 
@@ -504,6 +580,8 @@ function cleanCode(raw: string): string {
     .replace(/```\s*/g, '')
     .replace(/\r\n/g, '\n')
     .replace(/^\s*\/\/.*$/gm, '')
+    .replace(/^REASON:.*$/gm, '')
+    .replace(/^CODE:\s*$/gm, '')
     .trim();
 
   // Step 1: Join everything into single lines per voice (normalize LLM output)
@@ -574,9 +652,23 @@ function parseReasonCode(raw: string): { reason: string; code: string } {
   if (raw.includes('REASON:') && raw.includes('CODE:')) {
     reason = raw.substring(raw.indexOf('REASON:') + 7, raw.indexOf('CODE:')).trim();
     code = raw.substring(raw.indexOf('CODE:') + 5).trim();
+  } else if (raw.includes('REASON:')) {
+    // REASON without CODE: marker — extract reason, rest is code
+    const reasonMatch = raw.match(/REASON:\s*(.+)/);
+    if (reasonMatch) {
+      reason = reasonMatch[1].trim();
+      code = raw.substring(raw.indexOf('\n', raw.indexOf('REASON:')) + 1).trim();
+    }
   }
 
   return { reason, code: cleanCode(code) };
+}
+
+function cleanStaleVoiceRatings(s: Session, currentVoices: import('./types.js').ParsedVoice[]): void {
+  const voiceNames = new Set(currentVoices.map(v => v.name));
+  for (const name of s.voiceRatings.keys()) {
+    if (!voiceNames.has(name)) s.voiceRatings.delete(name);
+  }
 }
 
 function truncate(s: string, max: number): string {

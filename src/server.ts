@@ -6,6 +6,7 @@ import { WebSocketServer, WebSocket } from 'ws';
 import { createLlm } from './llm.js';
 import { loadSkills, allSkills, getSkill, skillVersions } from './skills.js';
 import { startSession, stopSession, onSelectSkill, onCommand, onCodeEdit, onRate, onSetEvolveInterval, onEvolveNow } from './agent.js';
+import { connectNeon, disconnectNeon } from './db/neon.js';
 import type { WsIncoming, WsOutgoing } from './types.js';
 
 // ─── Config ───────────────────────────────────────
@@ -23,6 +24,16 @@ const llm = createLlm({
 });
 
 loadSkills(SKILLS_PATH);
+await connectNeon();
+
+// ─── Graceful shutdown ───────────────────────────
+for (const sig of ['SIGTERM', 'SIGINT'] as const) {
+  process.on(sig, async () => {
+    console.log(`\n[server] ${sig} received, shutting down...`);
+    await disconnectNeon();
+    process.exit(0);
+  });
+}
 
 // ─── HTTP Server (for REST API + static files) ────
 
@@ -100,7 +111,7 @@ wss.on('connection', (ws: WebSocket) => {
           if (msg.currentCode) onCodeEdit(id, msg.currentCode);
           break;
         case 'rate':
-          onRate(id, msg.rating ?? 3);
+          onRate(id, msg.rating ?? 3, msg.voiceName);
           break;
         case 'set_evolve_interval':
           if (msg.interval) onSetEvolveInterval(id, msg.interval);

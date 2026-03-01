@@ -1,337 +1,362 @@
 # Genre Pattern Reference
 
-Concrete drum, bass, and variation patterns per genre. Use these as starting points and adapt to the current context. All patterns use `$name:` voice syntax.
+Concrete drum, bass, chord, and variation patterns per genre.
+ALL drum patterns use .beat(positions, 16) for grid-locked timing.
+Use these as starting points and adapt to the current context.
+
+---
+
+## ⚠️ Pattern Rules
+
+1. ALL drum voices use `.beat(positions, 16)` — never mix step counts
+2. Bass uses 4 or 8 events per cycle with rests (~), no .slow()
+3. Chords use `<>` angle brackets to step one per cycle
+4. Apply .swing() with the SAME value to ALL voices that need swing
+5. Use .bank("RolandTR808") or .bank("RolandTR909") consistently within a pattern
 
 ---
 
 ## Drum Patterns
 
-### Techno
+### Techno (120-130 BPM, straight, no swing)
+
+```
+// Minimal — four on the floor
+$kick: sound("bd:3").beat("0,4,8,12", 16).bank("RolandTR909").gain(0.7)
+
+// Medium — with clap backbeat
+$kick: sound("bd:3").beat("0,4,8,12", 16).bank("RolandTR909").gain(0.7)
+$clap: sound("cp").beat("4,12", 16).bank("RolandTR909").gain(0.5).room(0.3)
+
+// Full — offbeat hats
+$kick: sound("bd:3").beat("0,4,8,12", 16).bank("RolandTR909").gain(0.7)
+$clap: sound("cp").beat("4,12", 16).bank("RolandTR909").gain(0.5).room(0.3)
+$hat: sound("hh:2").beat("2,6,10,14", 16).bank("RolandTR909").gain(0.25).hpf(5000)
+
+// Complex — with ghost hats and open hat
+$kick: sound("bd:3").beat("0,4,8,12", 16).bank("RolandTR909").gain(0.7)
+$clap: sound("cp").beat("4,12", 16).bank("RolandTR909").gain(0.5).room(0.3)
+$hat: sound("hh:2").beat("2,6,10,14", 16).bank("RolandTR909").gain(0.25).hpf(5000)
+$oh: sound("oh").beat("6,14", 16).bank("RolandTR909").gain(0.2).hpf(4000)
+$ghost: sound("hh").beat("1,3,5,7,9,11,13,15", 16).bank("RolandTR909").gain(0.08).hpf(6000)
+```
+
+### House (120-128 BPM, slight swing 0.05)
+
 ```
 // Minimal
-$kick: s("bd*4").gain(0.8)
+$kick: sound("bd").beat("0,4,8,12", 16).bank("RolandTR909").gain(0.7).swing(0.05)
+$hat: sound("hh").beat("2,6,10,14", 16).bank("RolandTR909").gain(0.3).swing(0.05)
 
 // Medium
-$kick: s("bd*4").gain(0.8)
-$snare: s("~ cp ~ cp").gain(0.6)
+$kick: sound("bd").beat("0,4,8,12", 16).bank("RolandTR909").gain(0.7).swing(0.05)
+$clap: sound("cp").beat("4,12", 16).bank("RolandTR909").gain(0.5).swing(0.05).room(0.3)
+$hat: sound("hh").beat("2,6,10,14", 16).bank("RolandTR909").gain(0.3).swing(0.05)
 
 // Full
-$kick: s("bd*4").gain(0.8)
-$snare: s("~ cp ~ cp").gain(0.6)
-$hat: s("hh*8").gain(0.4)
-
-// Complex
-$kick: s("bd*4").gain(0.8)
-$snare: s("~ cp ~ cp").gain(0.6)
-$hat: s("[~ hh]*4").gain(0.4)
-$oh: s("oh ~ ~ ~").gain(0.3).swing(0.05)
+$kick: sound("bd").beat("0,4,8,12", 16).bank("RolandTR909").gain(0.7).swing(0.05)
+$clap: sound("cp").beat("4,12", 16).bank("RolandTR909").gain(0.5).swing(0.05).room(0.3)
+$hat: sound("hh").beat("0,2,4,6,8,10,12,14", 16).bank("RolandTR909").gain(0.25).swing(0.05)
+$oh: sound("oh").beat("6,14", 16).bank("RolandTR909").gain(0.2).swing(0.05)
 ```
 
-### House
-```
-// Minimal
-$kick: s("bd*4").gain(0.8)
-$hat: s("hh*8").gain(0.4)
+### Lo-fi Hip-hop (70-85 BPM, swing 0.15-0.25)
 
-// Medium
-$kick: s("bd*4").gain(0.8)
-$hat: s("hh*8").gain(0.4)
-$snare: s("~ cp ~ cp").gain(0.6)
-
-// Full
-$kick: s("bd*4").gain(0.8)
-$hat: s("[~ hh]*4").gain(0.4)
-$snare: s("~ cp ~ cp").gain(0.6)
-$oh: s("oh ~ oh ~").gain(0.3)
-
-// Complex — add fills every 4 bars
-$kick: s("bd*4").gain(0.8)
-$hat: s("[~ hh]*4").gain(0.4).every(4, x => x.fast(2))
-$snare: s("~ cp ~ cp").gain(0.6)
-```
-
-### Lo-fi Hip-hop
 ```
 // Minimal — lazy swing
-$kick: s("bd ~ ~ bd ~ ~ bd ~").bank("RolandTR808").gain(0.6).swing(0.15)
-$snare: s("~ ~ sd ~ ~ sd ~ ~").bank("RolandTR808").gain(0.45).swing(0.15).room(0.3)
+$kick: sound("bd:1").beat("0,6,10,14", 16).bank("RolandTR808").gain(0.6).swing(0.2)
+$snare: sound("sd:2").beat("4,12", 16).bank("RolandTR808").gain(0.45).swing(0.2).room(0.3)
 
 // Medium — with dusty hats
-$kick: s("bd ~ ~ bd ~ ~ bd ~").bank("RolandTR808").gain(0.6).swing(0.2)
-$snare: s("~ ~ sd ~ ~ sd ~ ~").bank("RolandTR808").gain(0.45).swing(0.2).room(0.3)
-$hat: s("hh*8").gain(rand.range(0.1, 0.25)).degradeBy(0.15).lpf(3500)
+$kick: sound("bd:1").beat("0,6,10,14", 16).bank("RolandTR808").gain(0.6).swing(0.2)
+$snare: sound("sd:2").beat("4,12", 16).bank("RolandTR808").gain(0.45).swing(0.2).room(0.3)
+$hat: sound("hh").beat("0,2,4,6,8,10,12,14", 16).bank("RolandTR808").gain(rand.range(0.1, 0.25)).swing(0.2).degradeBy(0.15).lpf(3500)
 
 // Full — ghost notes and texture
-$kick: s("bd ~ ~ bd ~ ~ bd ~").bank("RolandTR808").gain(0.6).swing(0.2)
-$snare: s("~ ~ sd ~ ~ sd ~ ~").bank("RolandTR808").gain(0.45).swing(0.2).room(0.3)
-$ghost: s("~ sd:2 ~ ~ sd:2 ~ ~ sd:2").bank("RolandTR808").gain(0.12).swing(0.2)
-$hat: s("hh*8").gain(rand.range(0.1, 0.25)).degradeBy(0.2).lpf(3500).pan(sine.range(0.3, 0.7).slow(4))
-$rim: s("~ rim ~ rim").bank("RolandTR808").gain(0.15).degradeBy(0.3)
+$kick: sound("bd:1").beat("0,6,10,14", 16).bank("RolandTR808").gain(0.6).swing(0.2)
+$snare: sound("sd:2").beat("4,12", 16).bank("RolandTR808").gain(0.45).swing(0.2).room(0.3)
+$ghost: sound("sd:2").beat("2,7,11,15", 16).bank("RolandTR808").gain(0.12).swing(0.2)
+$hat: sound("hh").beat("0,2,4,6,8,10,12,14", 16).bank("RolandTR808").gain(rand.range(0.1, 0.25)).swing(0.2).degradeBy(0.2).lpf(3500).pan(sine.range(0.3, 0.7).slow(4))
+$rim: sound("rim").beat("2,10", 16).bank("RolandTR808").gain(0.15).swing(0.2).degradeBy(0.3)
 ```
 
-### Drum & Bass
+### Soul / Neo-Soul (75-95 BPM, swing 0.2-0.3)
+
 ```
-// Minimal — broken kick pattern
-$kick: s("bd ~ ~ bd ~ ~ bd ~").gain(0.8)
-$snare: s("~ ~ cp ~ ~ cp ~ ~").gain(0.7)
+// Minimal — pocket groove
+$kick: sound("bd:1").beat("0,6,10", 16).bank("RolandTR808").gain(0.5).swing(0.25)
+$snare: sound("sd:2").beat("4,12", 16).bank("RolandTR808").gain(0.35).swing(0.25).room(0.3)
 
-// Medium
-$kick: s("bd ~ ~ [bd bd] ~ ~ bd ~").gain(0.8)
-$snare: s("~ ~ cp ~ ~ cp ~ ~").gain(0.7)
-$hat: s("hh*16").gain(0.3)
-
-// Full — double-time
-$kick: s("bd ~ ~ [bd bd] ~ ~ bd ~").gain(0.8).fast(2)
-$snare: s("~ ~ cp ~ [~ cp] ~ cp ~ ~").gain(0.7).fast(2)
-$hat: s("hh*16").gain(0.3).fast(2)
+// Medium — with ghost notes
+$kick: sound("bd:1").beat("0,6,10,14", 16).bank("RolandTR808").gain(0.5).swing(0.25)
+$snare: sound("sd:2").beat("4,12", 16).bank("RolandTR808").gain(0.35).swing(0.25).room(0.3)
+$ghost: sound("sd:2").beat("7,15", 16).bank("RolandTR808").gain(0.1).swing(0.25)
+$rim: sound("rim").beat("2,6,10,14", 16).bank("RolandTR808").gain(0.12).swing(0.25).degradeBy(0.3)
 ```
 
-### Breakbeat
+### Jazz (100-140 BPM, swing 0.25-0.35)
+
 ```
-// Minimal — syncopated kick
-$kick: s("bd ~ ~ bd ~ ~ ~ bd").gain(0.8)
-$snare: s("~ cp ~ ~ cp ~").gain(0.7)
+// Minimal — ride + walking feel
+$ride: sound("hh").beat("0,3,4,7,8,11,12,15", 16).gain(0.3).swing(0.3).hpf(4000)
+$kick: sound("bd").beat("0,10", 16).bank("RolandTR808").gain(0.4).swing(0.3)
 
-// Medium
-$kick: s("bd ~ ~ bd ~ [~ bd] ~ bd").gain(0.8)
-$snare: s("~ cp ~ ~ cp ~").gain(0.7)
-$hat: s("hh*8").gain(0.35)
+// Medium — brushes
+$ride: sound("hh").beat("0,3,4,7,8,11,12,15", 16).gain(0.3).swing(0.3).hpf(4000)
+$kick: sound("bd").beat("0,10", 16).bank("RolandTR808").gain(0.4).swing(0.3)
+$snare: sound("sd:2").beat("4,12", 16).bank("RolandTR808").gain(0.2).swing(0.3).room(0.35).degradeBy(0.15)
 
-// Full — heavy swing
-$kick: s("bd ~ [~ bd] bd ~ [~ bd] ~ bd").gain(0.8)
-$snare: s("~ cp ~ ~ cp [~ cp]").gain(0.7)
-$hat: s("hh*8").gain(0.35).swing(0.1)
-```
-
-### Trap
-```
-// Minimal
-$kick: s("bd*2").gain(0.9)
-$snare: s("~ cp ~ cp").gain(0.7)
-
-// Medium — hat rolls
-$kick: s("bd*2").gain(0.9)
-$snare: s("~ cp ~ cp").gain(0.7)
-$hat: s("hh*8").gain(0.35).every(2, x => x.fast(2))
-
-// Full — heavy swing, rapid hats
-$kick: s("bd [bd bd] ~ bd").gain(0.9)
-$snare: s("~ cp ~ cp").gain(0.7)
-$hat: s("hh*16").gain(0.3).swing(0.2)
+// Full — with ghost snares
+$ride: sound("hh").beat("0,3,4,7,8,11,12,15", 16).gain(0.3).swing(0.3).hpf(4000)
+$kick: sound("bd").beat("0,10", 16).bank("RolandTR808").gain(0.4).swing(0.3)
+$snare: sound("sd:2").beat("4,12", 16).bank("RolandTR808").gain(0.2).swing(0.3).room(0.35).degradeBy(0.15)
+$ghost: sound("sd:2").beat("1,5,9,13", 16).bank("RolandTR808").gain(0.08).swing(0.3)
 ```
 
-### Jungle
+### Minimal Techno (120-128 BPM, straight, no swing)
+
 ```
-// Minimal — fast broken beat
-$kick: s("bd ~ [~ bd] bd ~ ~ bd ~").gain(0.8).fast(2)
-$snare: s("~ cp ~ ~ cp ~").gain(0.7).fast(2)
+// Minimal — locked kick
+$kick: sound("bd:3").beat("0,4,8,12", 16).bank("RolandTR909").gain(0.7).lpf(3000)
 
-// Full — layered fast breaks
-$kick: s("bd ~ [~ bd] bd ~ [bd bd] bd ~").gain(0.8).fast(2)
-$snare: s("~ cp ~ [~ cp] cp ~").gain(0.7).fast(2)
-$hat: s("hh*32").gain(0.25).fast(2)
-```
+// Medium — offbeat hats
+$kick: sound("bd:3").beat("0,4,8,12", 16).bank("RolandTR909").gain(0.7).lpf(3000)
+$hat: sound("hh:2").beat("2,6,10,14", 16).bank("RolandTR909").gain(0.25).hpf(5000)
 
-### Ambient
-```
-// Minimal — very sparse
-$kick: s("bd ~ ~ ~").gain(0.5)
-
-// Medium — with room
-$kick: s("bd ~ ~ ~").gain(0.5).room(0.9)
-$hat: s("~ ~ ~ hh:8").gain(0.3).room(0.9)
-
-// Full — spacious
-$kick: s("bd ~ ~ ~").gain(0.5).room(0.9)
-$hat: s("~ ~ ~ hh:8").gain(0.3).room(0.9)
-$oh: s("~ ~ oh:5 ~").gain(0.25).room(0.9)
+// Full — with clap and percussion
+$kick: sound("bd:3").beat("0,4,8,12", 16).bank("RolandTR909").gain(0.7).lpf(3000)
+$hat: sound("hh:2").beat("2,6,10,14", 16).bank("RolandTR909").gain(0.25).hpf(5000)
+$clap: sound("cp").beat("4,12", 16).bank("RolandTR909").gain(0.4).room(0.3)
+$rim: sound("rim").beat("4,10,14", 16).bank("RolandTR909").gain(0.15)
 ```
 
-### Experimental
+### Drum & Bass (170+ BPM, straight)
+
 ```
-// Euclidean rhythms
-$kick: s("bd").euclid(5, 8).gain(0.7)
+// Minimal — two-step break
+$kick: sound("bd").beat("0,10", 16).bank("RolandTR909").gain(0.7)
+$snare: sound("sd:3").beat("4,12", 16).bank("RolandTR909").gain(0.65)
 
-// Polymetric
-$kick: s("bd").euclid(5, 8).gain(0.7)
-$snare: s("cp").euclid(7, 16).gain(0.5)
-```
+// Medium — with hats
+$kick: sound("bd").beat("0,10", 16).bank("RolandTR909").gain(0.7)
+$snare: sound("sd:3").beat("4,12", 16).bank("RolandTR909").gain(0.65)
+$hat: sound("hh").beat("0,2,4,6,8,10,12,14", 16).bank("RolandTR909").gain(0.2).hpf(5000)
 
-### Intelligent DnB (LTJ Bukem style)
-```
-// Minimal — sparse break
-$break: s("breaks165").fit().slice(8, "0 ~ ~ 3 ~ ~ 6 ~").gain(0.5).room(0.3).lpf(5000)
-
-// Medium — classic rolling break
-$break: s("breaks165").fit().slice(8, "0 0 6 3 0 2 6 7").gain(0.7).room(0.2)
-
-// Full — layered breaks with kick reinforcement
-$break: s("breaks165").fit().slice(8, "0 0 6 3 0 2 6 7").gain(0.65).room(0.2)
-$ghost: s("breaks165").fit().chop(16).gain(0.12).hpf(3000).room(0.4)
-$kick: s("bd ~ ~ ~ [~ bd] ~ bd ~").bank("RolandTR909").gain(0.45).lpf(100)
+// Full — syncopated kick + ghost snare
+$kick: sound("bd").beat("0,6,10", 16).bank("RolandTR909").gain(0.7)
+$snare: sound("sd:3").beat("4,12", 16).bank("RolandTR909").gain(0.65)
+$ghost: sound("sd:2").beat("2,8,14", 16).bank("RolandTR909").gain(0.15)
+$hat: sound("hh").beat("0,2,4,6,8,10,12,14", 16).bank("RolandTR909").gain(0.2).hpf(5000)
 ```
 
-### Trip Hop (Portishead / Massive Attack style)
+### Trip Hop (80-100 BPM, swing 0.1)
+
 ```
-// Minimal — sparse and moody
-$kick: s("bd ~ ~ ~").gain(0.7).room(0.5)
-$snare: s("~ ~ ~ sd:3").gain(0.6).room(0.5)
+// Minimal — sparse and dark
+$kick: sound("bd").beat("0,10", 16).bank("RolandTR808").gain(0.7).swing(0.1).room(0.4)
+$snare: sound("sd:3").beat("12", 16).bank("RolandTR808").gain(0.6).swing(0.1).room(0.5)
 
-// Medium — half-time feel
-$kick: s("bd ~ ~ bd ~ ~ bd ~").gain(0.8)
-$snare: s("~ ~ ~ ~ sd ~ ~ ~").bank("RolandTR808").gain(0.7).room(0.4)
-$hat: s("hh*8").gain(0.25).hpf(6000).pan(sine.range(0.3, 0.7))
-
-// Full — layered with ghost snares
-$kick: s("bd ~ [~ bd] ~ bd ~ ~ ~").gain(0.8)
-$snare: s("~ ~ ~ ~ sd ~ ~ ~").bank("RolandTR808").gain(0.7).room(0.5)
-$ghost: s("~ ~ ~ sd:3? ~ ~ sd:2? ~").bank("RolandTR808").gain(0.2).room(0.4)
-$hat: s("hh*8").gain(perlin.range(0.15, 0.3)).hpf(5000)
-$oh: s("~ oh ~ ~ ~ oh ~ ~").bank("RolandTR808").gain(0.2).room(0.6)
+// Medium — with ghost texture
+$kick: sound("bd").beat("0,6,10", 16).bank("RolandTR808").gain(0.7).swing(0.1).room(0.4)
+$snare: sound("sd:3").beat("4,12", 16).bank("RolandTR808").gain(0.6).swing(0.1).room(0.5)
+$hat: sound("hh").beat("0,2,4,6,8,10,12,14", 16).bank("RolandTR808").gain(0.2).swing(0.1).hpf(5000).pan(sine.range(0.3, 0.7))
+$ghost: sound("sd:2").beat("7,15", 16).bank("RolandTR808").gain(0.12).swing(0.1).room(0.4)
 ```
 
-### Boom Bap (DJ Premier / Alchemist style)
+### Boom Bap (85-95 BPM, swing 0.1-0.15)
+
 ```
-// Minimal — hard kick and snare
-$kick: s("bd ~ ~ ~ sd ~ ~ ~, bd ~ ~ ~ sd ~ bd ~").gain(0.9)
+// Minimal — hard hits
+$kick: sound("bd").beat("0,5,10,14", 16).bank("RolandTR808").gain(0.8).swing(0.12)
+$snare: sound("sd:3").beat("4,12", 16).bank("RolandTR808").gain(0.7).swing(0.12)
 
-// Medium — with crispy hats
-$kick: s("bd ~ ~ ~ sd ~ ~ ~, bd ~ ~ bd sd ~ bd ~").gain(0.9)
-$hat: s("hh*8").gain(0.4).hpf(5000)
-$oh: s("~ ~ oh ~ ~ ~ oh ~").gain(0.3)
+// Medium — with crisp hats
+$kick: sound("bd").beat("0,5,10,14", 16).bank("RolandTR808").gain(0.8).swing(0.12)
+$snare: sound("sd:3").beat("4,12", 16).bank("RolandTR808").gain(0.7).swing(0.12)
+$hat: sound("hh").beat("0,2,4,6,8,10,12,14", 16).bank("RolandTR808").gain(0.4).swing(0.12).hpf(4000)
+$oh: sound("oh").beat("6,14", 16).bank("RolandTR808").gain(0.25).swing(0.12)
 
-// Full — golden era layered
-$kick: s("bd ~ ~ [~ bd] sd ~ ~ ~, bd ~ ~ bd sd ~ [bd bd] ~").gain(0.9)
-$snare: s("~ ~ ~ ~ sd:3 ~ ~ ~").gain(0.3).room(0.2)
-$hat: s("[~ hh]*8").gain(0.45).hpf(4000)
-$oh: s("~ ~ oh ~ ~ ~ ~ oh:2").gain(0.25).room(0.3)
+// Full — with variation
+$kick: sound("bd").beat("<0,5,10,14 0,5,8,10,14>", 16).bank("RolandTR808").gain(0.8).swing(0.12)
+$snare: sound("sd:3").beat("4,12", 16).bank("RolandTR808").gain(0.7).swing(0.12)
+$hat: sound("hh").beat("0,2,4,6,8,10,12,14", 16).bank("RolandTR808").gain(0.4).swing(0.12).hpf(4000)
+$oh: sound("oh").beat("6,14", 16).bank("RolandTR808").gain(0.25).swing(0.12)
+$rim: sound("rim").beat("2,10", 16).bank("RolandTR808").gain(0.15).swing(0.12)
+```
+
+### Trap (130-170 BPM, swing 0-0.1)
+
+```
+// Minimal — 808 kick + clap
+$kick: sound("bd:4").beat("0,8", 16).bank("RolandTR808").gain(0.8)
+$clap: sound("cp").beat("4,12", 16).bank("RolandTR808").gain(0.6)
+
+// Medium — rapid hats
+$kick: sound("bd:4").beat("0,8", 16).bank("RolandTR808").gain(0.8)
+$clap: sound("cp").beat("4,12", 16).bank("RolandTR808").gain(0.6)
+$hat: sound("hh").beat("0,2,4,6,8,10,12,14", 16).bank("RolandTR808").gain(0.3)
+
+// Full — double hat rolls
+$kick: sound("bd:4").beat("0,6,8", 16).bank("RolandTR808").gain(0.8)
+$clap: sound("cp").beat("4,12", 16).bank("RolandTR808").gain(0.6)
+$hat: sound("hh").beat("0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15", 16).bank("RolandTR808").gain(0.25)
+$oh: sound("oh").beat("6,14", 16).bank("RolandTR808").gain(0.2)
+```
+
+### Ambient (no strict beat, use mini-notation here)
+
+```
+// Minimal — very sparse, room is the instrument
+$pulse: sound("bd").beat("0", 16).gain(0.4).room(0.9)
+
+// Subtle texture
+$dust: sound("hh").beat("4,12", 16).gain(0.08).room(0.8).degradeBy(0.5).lpf(2000)
 ```
 
 ---
 
 ## Bassline Patterns
 
-All examples shown in **C minor**. To transpose to another key, change the note names:
+All bass patterns use 4 or 8 events per cycle. NO .slow() on bass.
+Shown in C minor. Transpose by changing note names.
 
-| Interval | C minor | Eb minor | F minor | Ab minor |
-|----------|---------|----------|---------|----------|
-| Root     | C       | Eb       | F       | Ab       |
-| Minor 3rd| Eb      | Gb       | Ab      | B        |
-| 4th      | F       | Ab       | Bb      | Db       |
-| 5th      | G       | Bb       | C       | Eb       |
-| Minor 7th| Bb      | Db       | Eb      | Gb       |
-
-### Techno
+### Techno — root pulse
 ```
-$bass: note("C2 C2 C2 C2").sound("sawtooth").lpf(800).gain(0.7)
+$bass: note("C2 C2 C2 C2").sound("square").lpf(sine.range(200, 800).slow(8)).gain(0.4)
 ```
 
-### House
+### House — root + octave
 ```
-$bass: note("C2 ~ C2 ~").sound("sine").gain(0.8)
+$bass: note("C2 ~ C3 ~").sound("sine").lpf(600).gain(0.5)
 ```
+
+### Lo-fi Hip-hop — walking roots
+```
+$bass: note("C2 ~ C2 ~ Eb2 ~ F2 ~").sound("triangle").lpf(350).gain(0.4)
+```
+
+### Soul / Neo-Soul — walking through chord tones
+```
+$bass: note("Eb2 ~ F2 G2 ~ Ab2 G2 ~").sound("triangle").lpf(400).gain(0.45)
+```
+
+### Jazz — walking bass (one note per beat)
+```
+$bass: note("C2 D2 Eb2 F2").sound("triangle").lpf(500).gain(0.45).swing(0.3)
+```
+
+### Minimal Techno — filter is the melody
+```
+$bass: note("C2 C2 C2 C2 ~ C2 C2 ~").sound("square").lpf(sine.range(200, 800).slow(8)).gain(0.4)
+```
+
+### Drum & Bass — sub weight
+```
+$bass: note("C1 ~ ~ C2 ~ C1 ~ ~").sound("sine").lpf(80).gain(0.65)
+```
+
+### Trip Hop — dark and sparse
+```
+$bass: note("C1 ~ ~ C1 ~ F1 ~ ~").sound("sine").lpf(120).gain(0.7).room(0.3)
+```
+
+### Boom Bap — punchy short notes
+```
+$bass: note("C1 ~ C1 ~ C1 F1 ~ ~").sound("sawtooth").lpf(200).gain(0.7)
+```
+
+### Ambient — drone, no rhythm
+```
+$drone: note("C1").sound("sine").lpf(150).gain(0.3)
+```
+
+---
+
+## Chord Patterns
+
+Use `<>` angle brackets so chords step one per cycle (one per bar).
+This automatically aligns with the drum grid.
 
 ### Lo-fi Hip-hop
 ```
-$bass: note("C2 ~ C2 ~ Eb2 ~ F2 ~").sound("triangle").slow(2).lpf(350).gain(0.4)
+$chord: chord("<Cm7 Fm7 Abmaj7 G7>").voicing().sound("sawtooth").lpf(sine.range(500, 1200).slow(8)).gain(0.3).room(0.6)
 ```
 
-### Drum & Bass
+### Soul / Neo-Soul
 ```
-$bass: note("C1 ~ ~ C2 ~ C1 ~ ~").sound("square").lpf(400).gain(0.7)
-```
-
-### Acid
-```
-$bass: note("C2 C3 C2 Eb2").sound("sawtooth").lpf(sine.range(200, 2000).slow(4)).gain(0.7)
-```
-
-### Dub
-```
-$bass: note("C1 ~ ~ ~ C1 ~ G1 ~").sound("sine").room(0.5).gain(0.7)
-```
-
-### Funk
-```
-$bass: note("C2 C2 ~ G2 ~ C2 Bb2 ~").sound("square").lpf(1200).gain(0.7)
+$keys: chord("<Ebmaj7 Abmaj7 Fm9 Bb7>").voicing().sound("sawtooth").lpf(1200).room(0.6).gain(0.35)
 ```
 
 ### Jazz
 ```
-$bass: note("C2 ~ F2 ~ Bb2 ~").sound("sine").gain(0.7)
+$chord: chord("<Dm7 G7 Cmaj7 Am7>").voicing().sound("sawtooth").lpf(1500).gain(0.25).room(0.4).swing(0.3).degradeBy(0.2)
 ```
 
-### Ambient
+### Minimal Techno — stab (not sustained chord)
 ```
-$bass: note("C1").sound("sine").attack(2).release(4).gain(0.6)
-```
-
-### Intelligent DnB
-```
-$bass: note("<C1 ~ C1 ~> <F1 ~ ~ F1> <Bb0 ~ Bb0 ~> <Eb1 ~ ~ ~>")
-  .sound("sine").gain(0.65).lpf(80)
-  .attack(0.01).decay(0.2).sustain(0.5).release(0.4)
+$stab: chord("<Cm Cm Cm Cm>").voicing().sound("sawtooth").lpf(sine.range(400, 1500).slow(16)).gain(0.2)
 ```
 
-### Trip Hop
+### Ambient — slow evolving pad
 ```
-$bass: note("<C1 ~ ~ C1> <~ F1 ~ ~> <G1 ~ C1 ~> <~ ~ F1 ~>")
-  .sound("sine").gain(0.7).lpf(120)
-  .attack(0.02).decay(0.3).sustain(0.6).release(0.8).room(0.3)
+$pad: note("<C4 E4 G4>").sound("supersaw").lpf(sine.range(300, 1500).slow(16)).room(0.9).gain(0.25)
 ```
 
-### Boom Bap
+### Trip Hop — dark minor chords
 ```
-$bass: note("<C1 ~ C1 ~> <C1 F1 ~ ~> <C1 ~ G1 ~> <F1 ~ C1 ~>")
-  .sound("sawtooth").gain(0.7).lpf(200)
-  .attack(0.01).decay(0.15).sustain(0.4).release(0.3)
+$pad: chord("<Cm7 Fm7 Gm7 Cm7>").voicing().sound("sawtooth").lpf(800).room(0.6).gain(0.25)
+```
+
+---
+
+## 16-Step Grid Reference
+
+```
+Position:  0  1  2  3  4  5  6  7  8  9  10 11 12 13 14 15
+Beat:      1  .  &  .  2  .  &  .  3  .  &  .  4  .  &  .
+Count:     1  e  &  a  2  e  &  a  3  e  &  a  4  e  &  a
+
+Four on the floor:  0,4,8,12          (kick every beat)
+Backbeat:           4,12              (snare on 2 and 4)
+Offbeat hats:       2,6,10,14         (& of each beat)
+Eighth-note hats:   0,2,4,6,8,10,12,14
+Sixteenth hats:     all 16 positions
+Tresillo:           0,3,6,10          (Latin clave base)
 ```
 
 ---
 
 ## Variation Techniques
 
-Apply these to any voice to create movement over time:
+Apply to individual voices for movement. Keep ALL drums on the same grid.
 
 | Type | Modifier | Effect |
 |------|----------|--------|
-| Subtle | `.sometimes(x => x.fast(2))` | Occasionally double speed |
-| Moderate | `.every(4, x => x.rev).sometimes(x => x.fast(2))` | Reverse every 4 + occasional doubles |
-| Extreme | `.every(2, x => x.jux(rev)).sometimes(x => x.iter(4))` | Stereo reverse + iteration |
-| Glitch | `.sometimes(x => x.chop(8).rev).rarely(x => x.speed(-1))` | Chop-reverse + rare backwards |
-| Evolving | `.slow(4).every(8, x => x.fast(2)).every(16, x => x.palindrome)` | Long slow evolution |
+| Hat dynamics | `.gain(rand.range(0.1, 0.25))` | Random velocity per hit |
+| Hat thinning | `.degradeBy(0.2)` | Drop 20% of hat hits randomly |
+| Kick variation | `.beat("<0,4,8,12 0,4,6,10,14>", 16)` | Alternate kick pattern every bar |
+| Filter movement | `.lpf(sine.range(500, 2000).slow(8))` | Slow filter sweep |
+| Stereo movement | `.pan(sine.range(0.3, 0.7).slow(4))` | Gentle L-R sweep |
+| Every-N fills | `.every(4, x => x.fast(2))` | Double speed every 4 bars |
+| Occasional reverse | `.sometimesBy(0.1, x => x.rev)` | Rare pattern reverse |
 
 ---
 
-## Fill / Transition Patterns
+## Common Beat Positions by Feel
 
-Use these for drum fills at transitions (e.g., every 8 or 16 bars):
+### Straight / Driving (techno, house, DnB)
+- Kick: 0,4,8,12 (four-on-the-floor) or 0,8 (half-time)
+- Snare/clap: 4,12 (backbeat)
+- Hats: 2,6,10,14 (offbeat) or all even numbers (eighth notes)
 
-```
-// Techno fill
-$fill: s("bd*8, cp*4").gain(0.7)
+### Swung / Laid-back (lo-fi, soul, jazz, boom bap)
+- Kick: 0,6,10,14 (syncopated) or 0,5,10,14
+- Snare: 4,12 (backbeat stays on grid even with swing)
+- Hats: 0,2,4,6,8,10,12,14 with .degradeBy(0.15)
+- Ghost: 2,7,11,15 at very low gain (0.08-0.12)
+- ALL voices get the same .swing() value
 
-// House fill
-$fill: s("bd*4, cp*2, hh*16").gain(0.6)
-
-// Lo-fi fill — soft roll
-$fill: s("sd*4, hh*8").bank("RolandTR808").gain(0.4).swing(0.2).room(0.3)
-
-// DnB fill
-$fill: s("bd*8, sn*8").fast(2).gain(0.7)
-
-// Trap fill — hat rolls
-$fill: s("bd*4, hh*32").gain(0.6)
-
-// Breakbeat fill
-$fill: s("bd cp bd cp, hh*8").iter(4).gain(0.7)
-
-// Intelligent DnB fill — break chop
-$fill: s("breaks165").fit().slice(16, "0 2 4 6 8 10 12 14 1 3 5 7 9 11 13 15").gain(0.7)
-
-// Trip Hop fill
-$fill: s("bd ~ sd ~, hh*4").room(0.5).gain(0.6)
-
-// Boom Bap fill
-$fill: s("bd sd bd sd, hh*8").swing(0.1).gain(0.7)
-```
+### Sparse / Moody (ambient, trip hop)
+- Kick: 0 or 0,10 (minimal presence)
+- Snare: 12 only (once per bar) or 4,12
+- Hats: 4,12 with .degradeBy(0.5) and .room(0.8)
