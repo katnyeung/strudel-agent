@@ -2,22 +2,22 @@
 
 steps:
   - stage: foundation
-    description: "Start with warm chord pad — the emotional center"
+    description: "Start with warm chord pad — one chord per cycle via angle brackets"
     code: |
-      $chord: note("<C3 Eb3 G3 Bb3> <F3 Ab3 C4 Eb4> <Ab3 C4 Eb4 G4> <G3 Bb3 D4 F4>").sound("sawtooth").slow(4).lpf(sine.range(500,1200).slow(8)).gain(0.3).room(0.65)
+      $chord: chord("<Cm7 Fm7 Abmaj7 G7>").voicing().sound("sawtooth").lpf(sine.range(500,1200).slow(8)).gain(0.3).room(0.65)
 
   - stage: bass
-    description: "Add simple bass line — anchor the harmony"
+    description: "Add bass line — 8 events per cycle, no .slow(), aligned to one bar"
     code: |
-      $bass: note("C2 ~ C2 ~ Eb2 ~ F2 ~").sound("triangle").slow(2).lpf(350).gain(0.4)
+      $bass: note("C2 ~ C2 ~ Eb2 ~ F2 ~").sound("triangle").lpf(350).gain(0.4)
 
   - stage: groove
-    description: "Add kick with step sequencer feel"
+    description: "Add kick with step sequencer — grid-locked 16 steps"
     code: |
       $kick: sound("bd:1").beat("0,4,6,10,14",16).bank("RolandTR808").gain(0.6).lpf(2000)
 
   - stage: snare
-    description: "Add snare hits"
+    description: "Add snare hits on 2 and 4"
     code: |
       $snare: sound("sd:2").beat("4,12",16).bank("RolandTR808").gain(0.45).room(0.3)
 
@@ -27,7 +27,7 @@ steps:
       $hat: s("hh*8").gain(rand.range(0.1,0.25)).degradeBy(0.15).lpf(3500).pan(sine.range(0.3,0.7).slow(4))
 
   - stage: refine
-    description: "Add dust and character — more reverb, filter movement"
+    description: "Add variation — use <> angle brackets on bass/melody to prevent same loop"
 
   - stage: variation
-    description: "Evolve — change voicing, modulate, add/remove elements"
+    description: "Evolve — stagger changes: bass varies every 2 bars, chords every 4 bars, hats get new pattern every 8 bars"

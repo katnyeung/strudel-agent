@@ -2,17 +2,17 @@
 
 steps:
   - stage: foundation
-    description: "Rich chord progression on Rhodes-like sound"
+    description: "Rich chord progression on Rhodes-like sound — one chord per cycle"
     code: |
-      $keys: chord("<Ebmaj7 Abmaj7 Fm7 Bb7>").voicing().sound("sawtooth").slow(4).lpf(1200).room(0.6).gain(0.35)
+      $keys: chord("<Ebmaj7 Abmaj7 Fm7 Bb7>").voicing().sound("sawtooth").lpf(1200).room(0.6).gain(0.35)
 
   - stage: bass
-    description: "Walking bass through chord tones"
+    description: "Walking bass — 8 events per cycle, one bar at a time"
     code: |
-      $bass: note("Eb2 ~ F2 G2 ~ Ab2 G2 ~").sound("triangle").slow(2).lpf(400).gain(0.45)
+      $bass: note("Eb2 ~ F2 G2 ~ Ab2 G2 ~").sound("triangle").lpf(400).gain(0.45)
 
   - stage: groove
-    description: "Laid-back drum groove"
+    description: "Laid-back drum groove with swing"
     code: |
       $kick: sound("bd:1").beat("0,6,10,14",16).bank("RolandTR808").swing(0.2).gain(0.5).lpf(1800)
 
@@ -27,7 +27,7 @@ steps:
       $rim: s("~ rim ~ rim").bank("RolandTR808").gain(0.15).degradeBy(0.3)
 
   - stage: refine
-    description: "Add warmth — more filter movement, delay, subtle effects"
+    description: "Add warmth — filter movement, delay, subtle effects"
 
   - stage: variation
-    description: "Modulate — key change, new voicing, tempo shift"
+    description: "Modulate — vary bass notes with <> over 2-bar phrases, add chord extensions"

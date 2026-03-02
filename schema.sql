@@ -53,3 +53,15 @@ CREATE INDEX IF NOT EXISTS idx_commands_session ON human_commands(session_id);
 ALTER TABLE ratings ADD COLUMN IF NOT EXISTS voice_name TEXT;
 ALTER TABLE ratings ADD COLUMN IF NOT EXISTS voice_type TEXT;
 CREATE INDEX IF NOT EXISTS idx_ratings_voice ON ratings(voice_name) WHERE voice_name IS NOT NULL;
+
+-- Analysis pipeline watermark tracking (Phase 2)
+CREATE TABLE IF NOT EXISTS analysis_runs (
+  id              SERIAL PRIMARY KEY,
+  started_at      TIMESTAMPTZ NOT NULL,
+  ended_at        TIMESTAMPTZ,
+  events_processed INT DEFAULT 0,
+  patterns_written INT DEFAULT 0,
+  status          TEXT DEFAULT 'running'  -- 'running' | 'complete' | 'failed'
+);
+
+CREATE INDEX IF NOT EXISTS idx_analysis_runs_status ON analysis_runs(status, ended_at DESC);
