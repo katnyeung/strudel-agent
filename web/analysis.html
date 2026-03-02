@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Strudel Agent — Analysis Pipeline</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'SF Mono', 'Cascadia Code', 'Fira Code', monospace;
+      background: #0a0a0f;
+      color: #e0e0e0;
+      min-height: 100vh;
+      padding: 24px;
+    }
+    h1 { font-size: 1.4rem; color: #a78bfa; margin-bottom: 8px; }
+    h2 { font-size: 1.1rem; color: #7dd3fc; margin: 24px 0 12px; }
+    .subtitle { color: #888; font-size: 0.85rem; margin-bottom: 24px; }
+
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 24px; }
+    @media (max-width: 800px) { .grid { grid-template-columns: 1fr; } }
+
+    .card {
+      background: #151520;
+      border: 1px solid #2a2a3a;
+      border-radius: 8px;
+      padding: 16px;
+    }
+    .card-title { font-size: 0.9rem; color: #a78bfa; margin-bottom: 12px; }
+
+    .stat-row { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid #1a1a2a; }
+    .stat-row:last-child { border-bottom: none; }
+    .stat-label { color: #888; }
+    .stat-value { color: #7dd3fc; font-weight: bold; }
+    .stat-value.good { color: #4ade80; }
+    .stat-value.warn { color: #facc15; }
+    .stat-value.bad { color: #f87171; }
+
+    button {
+      background: #7c3aed;
+      color: white;
+      border: none;
+      padding: 10px 24px;
+      border-radius: 6px;
+      font-family: inherit;
+      font-size: 0.9rem;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    button:hover { background: #6d28d9; }
+    button:disabled { background: #444; cursor: not-allowed; }
+    button.secondary { background: #2a2a3a; }
+    button.secondary:hover { background: #3a3a4a; }
+
+    .actions { display: flex; gap: 12px; margin-bottom: 24px; }
+
+    .log {
+      background: #0d0d14;
+      border: 1px solid #2a2a3a;
+      border-radius: 8px;
+      padding: 16px;
+      max-height: 400px;
+      overflow-y: auto;
+      font-size: 0.8rem;
+      line-height: 1.6;
+    }
+    .log-entry { padding: 4px 0; border-bottom: 1px solid #1a1a2a; }
+    .log-entry:last-child { border-bottom: none; }
+    .log-time { color: #666; }
+    .log-ok { color: #4ade80; }
+    .log-err { color: #f87171; }
+    .log-info { color: #7dd3fc; }
+
+    .spinner {
+      display: inline-block;
+      width: 16px; height: 16px;
+      border: 2px solid #444;
+      border-top-color: #a78bfa;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      vertical-align: middle;
+      margin-right: 8px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 0.75rem;
+      font-weight: bold;
+    }
+    .badge.ready { background: #166534; color: #4ade80; }
+    .badge.offline { background: #7f1d1d; color: #f87171; }
+    .badge.running { background: #713f12; color: #facc15; }
+
+    table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
+    th { text-align: left; color: #888; padding: 8px; border-bottom: 1px solid #2a2a3a; }
+    td { padding: 8px; border-bottom: 1px solid #1a1a2a; }
+    tr:hover td { background: #1a1a2a; }
+
+    .back-link { color: #a78bfa; text-decoration: none; font-size: 0.85rem; }
+    .back-link:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+  <a href="/" class="back-link">← Back to Copilot</a>
+  <h1>Analysis Pipeline</h1>
+  <p class="subtitle">Neon (event logs) → Neo4j (musical knowledge graph)</p>
+
+  <!-- Status cards -->
+  <div class="grid">
+    <div class="card">
+      <div class="card-title">Neon (Postgres)</div>
+      <div class="stat-row">
+        <span class="stat-label">Status</span>
+        <span id="neon-status"><span class="badge offline">checking...</span></span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label">Events pending</span>
+        <span class="stat-value" id="events-pending">—</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label">Last analysis run</span>
+        <span class="stat-value" id="last-run-time">—</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label">Last run result</span>
+        <span class="stat-value" id="last-run-result">—</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Neo4j (Graph)</div>
+      <div class="stat-row">
+        <span class="stat-label">Status</span>
+        <span id="neo4j-status"><span class="badge offline">checking...</span></span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label">Voice States</span>
+        <span class="stat-value" id="graph-voice-states">—</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label">Transitions</span>
+        <span class="stat-value" id="graph-transitions">—</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- LLM Review status card -->
+  <div class="grid">
+    <div class="card">
+      <div class="card-title">LLM Review</div>
+      <div class="stat-row">
+        <span class="stat-label">Review LLM</span>
+        <span id="review-llm-status"><span class="badge offline">checking...</span></span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label">Last review</span>
+        <span class="stat-value" id="review-last">—</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label">Skills reviewed</span>
+        <span class="stat-value" id="review-skills">—</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Actions -->
+  <div class="actions">
+    <button id="btn-run" onclick="runAnalysis()">Run Analysis Now</button>
+    <button id="btn-merge" onclick="runReview('merge')">Merge New Data</button>
+    <button id="btn-full" onclick="runReview('full')">Full Review</button>
+    <button id="btn-refresh" class="secondary" onclick="refreshStatus()">Refresh Status</button>
+  </div>
+
+  <!-- Run log -->
+  <h2>Run Log</h2>
+  <div class="log" id="run-log">
+    <div class="log-entry log-info">Ready. Click "Run Analysis Now" to process pending events.</div>
+  </div>
+
+  <!-- Recent runs table -->
+  <h2>How It Works</h2>
+  <div class="card" style="margin-top: 12px; font-size: 0.85rem; line-height: 1.7; color: #aaa;">
+    <p><strong style="color:#7dd3fc">EXTRACT:</strong> Query <code>evolution_events</code> joined with <code>sessions</code> (for skill_id) since last watermark. Also fetch <code>ratings</code> in the same window.</p>
+    <p style="margin-top:8px"><strong style="color:#7dd3fc">TRANSFORM:</strong> For each event: extract voice names from code, compute <code>play_secs</code> (gap to next event), find closest rating within ±5 min.</p>
+    <p style="margin-top:8px"><strong style="color:#7dd3fc">LOAD:</strong> Write VoiceState nodes (voice combos with running averages) to Neo4j. Write TRANSITION edges between states where the voice set actually changed (no self-loops). Each edge tracks success rate and rating improvement.</p>
+    <p style="margin-top:8px"><strong style="color:#facc15">After analysis:</strong> The agent queries: (1) transitions from current state — "what voice-changing move worked well from here?" and (2) array containment — "what voice should I add/remove to reach a high-rated state?"</p>
+  </div>
+
+<script>
+const API = window.location.origin;
+
+function log(msg, type = 'info') {
+  const el = document.getElementById('run-log');
+  const time = new Date().toLocaleTimeString();
+  const cls = type === 'ok' ? 'log-ok' : type === 'err' ? 'log-err' : 'log-info';
+  el.innerHTML += `<div class="log-entry"><span class="log-time">${time}</span> <span class="${cls}">${msg}</span></div>`;
+  el.scrollTop = el.scrollHeight;
+}
+
+async function refreshStatus() {
+  try {
+    // Analysis status
+    const statusRes = await fetch(`${API}/api/analysis/status`);
+    const status = await statusRes.json();
+
+    // Neon status
+    if (status.status === 'neon_not_configured') {
+      document.getElementById('neon-status').innerHTML = '<span class="badge offline">not configured</span>';
+    } else {
+      document.getElementById('neon-status').innerHTML = '<span class="badge ready">connected</span>';
+    }
+
+    document.getElementById('events-pending').textContent = status.events_since ?? '—';
+
+    if (status.last_run) {
+      try {
+        const lr = JSON.parse(status.last_run);
+        document.getElementById('last-run-time').textContent = lr.ended_at
+          ? new Date(lr.ended_at).toLocaleString() : '—';
+        document.getElementById('last-run-result').textContent =
+          `${lr.events_processed} events → ${lr.patterns_written} states (${lr.status})`;
+      } catch {
+        document.getElementById('last-run-time').textContent = '—';
+        document.getElementById('last-run-result').textContent = status.last_run;
+      }
+    }
+
+    // Neo4j status
+    if (status.status === 'neo4j_not_connected') {
+      document.getElementById('neo4j-status').innerHTML = '<span class="badge offline">not connected</span>';
+    } else if (status.status === 'ready') {
+      document.getElementById('neo4j-status').innerHTML = '<span class="badge ready">connected</span>';
+      // Fetch graph stats
+      try {
+        const graphRes = await fetch(`${API}/api/graph/stats`);
+        const graph = await graphRes.json();
+        document.getElementById('graph-voice-states').textContent = graph.voice_states ?? '—';
+        document.getElementById('graph-transitions').textContent = graph.transitions ?? '—';
+      } catch {
+        document.getElementById('neo4j-status').innerHTML = '<span class="badge offline">error</span>';
+      }
+    } else {
+      document.getElementById('neo4j-status').innerHTML = `<span class="badge offline">${status.status}</span>`;
+    }
+  } catch (e) {
+    log(`Failed to fetch status: ${e.message}`, 'err');
+  }
+}
+
+async function runAnalysis() {
+  const btn = document.getElementById('btn-run');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span>Running...';
+
+  log('Starting analysis pipeline...');
+
+  try {
+    const res = await fetch(`${API}/api/analysis/run`, { method: 'POST' });
+    const result = await res.json();
+
+    if (result.status === 'complete') {
+      log(`✓ Analysis complete in ${result.duration_ms}ms`, 'ok');
+      log(`  Events processed: ${result.events_processed}`, 'ok');
+      log(`  Voice states written: ${result.states_written}`, 'ok');
+      log(`  Transitions written: ${result.transitions_written ?? 0}`, 'ok');
+      if (result.skills_processed && result.skills_processed.length > 0) {
+        log(`  Skills processed: ${result.skills_processed.join(', ')}`, 'ok');
+      }
+    } else {
+      log(`✗ Analysis failed: ${result.error}`, 'err');
+    }
+  } catch (e) {
+    log(`✗ Request failed: ${e.message}`, 'err');
+  }
+
+  btn.disabled = false;
+  btn.textContent = 'Run Analysis Now';
+  await refreshStatus();
+}
+
+async function runReview(mode) {
+  const btn = document.getElementById(mode === 'merge' ? 'btn-merge' : 'btn-full');
+  const label = mode === 'merge' ? 'Merge New Data' : 'Full Review';
+  btn.disabled = true;
+  btn.innerHTML = `<span class="spinner"></span>${mode === 'merge' ? 'Merging...' : 'Reviewing...'}`;
+
+  log(`Starting ${mode} LLM review...`);
+
+  try {
+    const res = await fetch(`${API}/api/review/${mode}`, { method: 'POST' });
+    const result = await res.json();
+
+    if (result.status === 'complete') {
+      log(`${mode} review complete in ${result.duration_ms}ms`, 'ok');
+      log(`  Skills reviewed: ${result.skills_reviewed.join(', ') || 'none'}`, 'ok');
+      if (result.skills_skipped.length > 0) {
+        log(`  Skills skipped (insufficient data): ${result.skills_skipped.join(', ')}`, 'info');
+      }
+    } else if (result.status === 'no_data') {
+      log('No skills found in graph. Run analysis first.', 'info');
+    } else {
+      log(`Review failed: ${result.error}`, 'err');
+    }
+  } catch (e) {
+    log(`Request failed: ${e.message}`, 'err');
+  }
+
+  btn.disabled = false;
+  btn.textContent = label;
+  await refreshStatus();
+}
+
+async function refreshReviewStatus() {
+  try {
+    const res = await fetch(`${API}/api/review/status`);
+    const status = await res.json();
+
+    document.getElementById('review-llm-status').innerHTML = status.review_llm_configured
+      ? '<span class="badge ready">configured</span>'
+      : '<span class="badge offline">not configured</span>';
+
+    if (status.last_review) {
+      const lr = status.last_review;
+      document.getElementById('review-last').textContent =
+        `${lr.status} (${lr.duration_ms}ms)`;
+      document.getElementById('review-skills').textContent =
+        lr.skills_reviewed.length > 0 ? lr.skills_reviewed.join(', ') : '—';
+    }
+  } catch { /* ignore */ }
+}
+
+// Initial load
+refreshStatus();
+refreshReviewStatus();
+// Auto-refresh every 30s
+setInterval(refreshStatus, 30000);
+</script>
+</body>
+</html>

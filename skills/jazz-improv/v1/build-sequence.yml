@@ -2,14 +2,14 @@
 
 steps:
   - stage: foundation
-    description: "Walking bass line through chord tones"
+    description: "Walking bass line — 8 events per cycle, one bar"
     code: |
-      $bass: note("C2 D2 E2 F2 G2 F2 E2 D2").sound("triangle").slow(2).swing(0.25).lpf(500).gain(0.45)
+      $bass: note("C2 D2 E2 F2 G2 F2 E2 D2").sound("triangle").swing(0.25).lpf(500).gain(0.45)
 
   - stage: harmony
-    description: "Sparse chord comping — not every beat"
+    description: "Sparse chord comping — one chord per cycle via angle brackets, with dropout"
     code: |
-      $chord: chord("<Dm7 G7 Cmaj7 Am7>").voicing().sound("sawtooth").slow(2).swing(0.3).lpf(1500).gain(0.25).room(0.4).degradeBy(0.2)
+      $chord: chord("<Dm7 G7 Cmaj7 Am7>").voicing().sound("sawtooth").swing(0.3).lpf(1500).gain(0.25).room(0.4).degradeBy(0.2)
 
   - stage: groove
     description: "Ride cymbal — the heartbeat of jazz"
@@ -27,7 +27,7 @@ steps:
       $melody: n("0 2 4 7 9 7 4 2").scale("C5:dorian").sound("sine").swing(0.3).lpf(3000).gain(0.2).room(0.5)
 
   - stage: refine
-    description: "Add blue notes, chromatic approach, tension and release"
+    description: "Add blue notes, chromatic approach tones, tension and release"
 
   - stage: variation
-    description: "Modulate to new key, change feel, trade fours"
+    description: "Vary bass walk with <> for different bar patterns, modulate to new key"

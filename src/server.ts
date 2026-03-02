@@ -7,6 +7,9 @@ import { createLlm } from './llm.js';
 import { loadSkills, allSkills, getSkill, skillVersions } from './skills.js';
 import { startSession, stopSession, onSelectSkill, onCommand, onCodeEdit, onRate, onSetEvolveInterval, onEvolveNow } from './agent.js';
 import { connectNeon, disconnectNeon } from './db/neon.js';
+import { connectNeo4j, disconnectNeo4j, setupSchema as setupNeo4jSchema, getGraphStats } from './db/neo4j.js';
+import { runAnalysis, getAnalysisStatus } from './db/analysis.js';
+import { runMergeReview, runFullReview, getReviewStatus } from './db/review.js';
 import type { WsIncoming, WsOutgoing } from './types.js';
 
 // ─── Config ───────────────────────────────────────
@@ -25,11 +28,16 @@ const llm = createLlm({
 
 loadSkills(SKILLS_PATH);
 await connectNeon();
+await connectNeo4j();
+if ((await import('./db/neo4j.js')).isConnected()) {
+  await setupNeo4jSchema();
+}
 
 // ─── Graceful shutdown ───────────────────────────
 for (const sig of ['SIGTERM', 'SIGINT'] as const) {
   process.on(sig, async () => {
     console.log(`\n[server] ${sig} received, shutting down...`);
+    await disconnectNeo4j();
     await disconnectNeon();
     process.exit(0);
   });
@@ -72,6 +80,55 @@ const server = http.createServer((req, res) => {
     json(res, {
       reloaded: true, count: allSkills().length,
       skills: allSkills().map(s => `${s.id} v${s.version}`),
+    });
+    return;
+  }
+
+  // Analysis pipeline endpoints
+  if (url.pathname === '/api/analysis/run' && req.method === 'POST') {
+    runAnalysis().then(result => json(res, result)).catch(e => {
+      res.writeHead(500);
+      res.end(JSON.stringify({ error: e.message }));
+    });
+    return;
+  }
+
+  if (url.pathname === '/api/analysis/status' && req.method === 'GET') {
+    getAnalysisStatus().then(result => json(res, result)).catch(e => {
+      res.writeHead(500);
+      res.end(JSON.stringify({ error: e.message }));
+    });
+    return;
+  }
+
+  // LLM Review endpoints
+  if (url.pathname === '/api/review/merge' && req.method === 'POST') {
+    const skill = url.searchParams.get('skill') ?? undefined;
+    runMergeReview(skill).then(result => json(res, result)).catch(e => {
+      res.writeHead(500);
+      res.end(JSON.stringify({ error: e.message }));
+    });
+    return;
+  }
+
+  if (url.pathname === '/api/review/full' && req.method === 'POST') {
+    const skill = url.searchParams.get('skill') ?? undefined;
+    runFullReview(skill).then(result => json(res, result)).catch(e => {
+      res.writeHead(500);
+      res.end(JSON.stringify({ error: e.message }));
+    });
+    return;
+  }
+
+  if (url.pathname === '/api/review/status' && req.method === 'GET') {
+    json(res, getReviewStatus());
+    return;
+  }
+
+  if (url.pathname === '/api/graph/stats' && req.method === 'GET') {
+    getGraphStats().then(result => json(res, result)).catch(e => {
+      res.writeHead(500);
+      res.end(JSON.stringify({ error: e.message }));
     });
     return;
   }

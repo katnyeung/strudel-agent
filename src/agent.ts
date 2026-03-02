@@ -3,7 +3,10 @@ import type { Skill, BuildStep, Session, HumanInput, WsOutgoing, ChatMessage } f
 import { allSkills, getSkill, getBaseKnowledge } from './skills.js';
 import { MusicTheory } from './music-theory.js';
 import * as neon from './db/neon.js';
-import { parseVoices, countVoices } from './db/voice-parser.js';
+import { parseSimpleVoices, countVoices, extractVoiceNames } from './db/voice-parser.js';
+import { buildGraphContext } from './db/graph-context.js';
+import { getSuggestedVoicesToAdd, getSuggestedVoicesToRemove, getBestTransitions } from './db/neo4j.js';
+import type { VoiceSuggestion, TransitionCandidate } from './db/graph-types.js';
 
 const theory = new MusicTheory();
 
@@ -127,7 +130,7 @@ export function onRate(id: string, rating: number, voiceName?: string): void {
   if (voiceName) {
     // Per-voice rating
     s.voiceRatings.set(voiceName, rating);
-    const voices = parseVoices(s.currentCode);
+    const voices = parseSimpleVoices(s.currentCode);
     const voice = voices.find(v => v.name === voiceName);
     neon.logRating({ session_id: id, rating, code_snapshot: s.currentCode || undefined, voice_name: voiceName, voice_type: voice?.type }).catch(e => console.error('[neon]', e.message));
     const emoji = rating <= 2 ? '👎' : rating >= 4 ? '👍' : '👌';
@@ -202,7 +205,7 @@ setcps(${cps})
       s.currentCode = code;
       addHistory(s, 'user', prompt);
       addHistory(s, 'assistant', `REASON: ${reason}\nCODE:\n${code}`);
-      const voices = parseVoices(code);
+      const voices = parseSimpleVoices(code);
       neon.logEvolution({ session_id: s.id, phase: 'bootstrap', code_after: code, voices, voice_count: voices.length, reason }).catch(e => console.error('[neon]', e.message));
       s.send({
         type: 'code_update', code, phase: 'bootstrap',
@@ -214,7 +217,7 @@ setcps(${cps})
       const firstVoice = foundation?.code ? foundation.code.trim() : '$kick: s("bd").gain(0.6)';
       const startCode = `setcps(${cps})\n${firstVoice}`;
       s.currentCode = startCode;
-      const voices = parseVoices(startCode);
+      const voices = parseSimpleVoices(startCode);
       neon.logEvolution({ session_id: s.id, phase: 'bootstrap', code_after: startCode, voices, voice_count: voices.length, reason: 'Fallback — LLM returned no valid code' }).catch(e => console.error('[neon]', e.message));
       s.send({
         type: 'code_update', code: startCode, phase: 'bootstrap',
@@ -228,7 +231,7 @@ setcps(${cps})
     const firstVoice = foundation?.code ? foundation.code.trim() : '$kick: s("bd").gain(0.6)';
     const startCode = `setcps(${cps})\n${firstVoice}`;
     s.currentCode = startCode;
-    const voices = parseVoices(startCode);
+    const voices = parseSimpleVoices(startCode);
     neon.logEvolution({ session_id: s.id, phase: 'bootstrap', code_after: startCode, voices, voice_count: voices.length, reason: 'Fallback — LLM error' }).catch(e => console.error('[neon]', e.message));
     s.send({
       type: 'code_update', code: startCode, phase: 'bootstrap',
@@ -278,7 +281,7 @@ async function evolutionTick(s: Session, llm: LlmGateway): Promise<void> {
 
   // Time to evolve
   s.evolveCount++;
-  const move = pickEvolutionMove(s);
+  const move = await pickEvolutionMove(s);
 
   s.send({ type: 'thinking', phase: 'evolving', message: `Evolution #${s.evolveCount}: ${move}` });
 
@@ -316,7 +319,7 @@ CODE:
 
   try {
     const messages: ChatMessage[] = [...getHistory(s), { role: 'user', content: prompt }];
-    const result = await llm.chat(buildEvolutionPrompt(s.skill!), messages);
+    const result = await llm.chat(await buildEvolutionPrompt(s.skill!, s.currentCode), messages);
     const { reason, code } = parseReasonCode(result);
 
     if (code && /\$\w+:/.test(code)) {
@@ -325,7 +328,7 @@ CODE:
       s.humanEdited = false;
       addHistory(s, 'user', prompt);
       addHistory(s, 'assistant', `REASON: ${reason}\nCODE:\n${code}`);
-      const voices = parseVoices(code);
+      const voices = parseSimpleVoices(code);
       cleanStaleVoiceRatings(s, voices);
       neon.logEvolution({ session_id: s.id, phase: 'evolving', move_type: move, code_before: codeBefore, code_after: code, voices, voice_count: voices.length, reason }).catch(e => console.error('[neon]', e.message));
       s.send({
@@ -340,7 +343,7 @@ CODE:
   scheduleEvolution(s, llm);
 }
 
-function pickEvolutionMove(s: Session): string {
+async function pickEvolutionMove(s: Session): Promise<string> {
   // Priority 1: fix disliked voices (one per cycle)
   for (const [name, vr] of s.voiceRatings) {
     if (vr <= 2) {
@@ -365,6 +368,31 @@ function pickEvolutionMove(s: Session): string {
 
   const rating = s.lastRating;
 
+  // Priority 3: query graph for data-driven moves
+  if (s.skill && s.currentCode) {
+    try {
+      const currentVoices = extractVoiceNames(s.currentCode);
+      if (currentVoices.length > 0) {
+        const [transitions, toAdd, toRemove] = await Promise.all([
+          getBestTransitions(s.skill.id, currentVoices, 1, 5),
+          getSuggestedVoicesToAdd(s.skill.id, currentVoices, 2, 5),
+          currentVoices.length >= 4 ? getSuggestedVoicesToRemove(s.skill.id, currentVoices, 2, 3) : Promise.resolve([]),
+        ]);
+
+        // Prefer transition data (exact path from current state) over suggestions
+        const transitionMove = pickTransitionMove(transitions, currentVoices);
+        if (transitionMove) return transitionMove;
+
+        // Fall back to voice suggestions (array containment)
+        const suggestion = pickVoiceSuggestion(toAdd, toRemove, currentVoices.length);
+        if (suggestion) return suggestion;
+      }
+    } catch (e: any) {
+      console.error('[agent] graph query failed, falling back to random:', e.message);
+    }
+  }
+
+  // Priority 4: random pool fallback (cold start)
   const subtle = [
     'Add subtle variation — ghost note, degradeBy, slight rhythm change on one voice',
     'Modulate a filter — add lpf with sine.range LFO on one voice',
@@ -413,6 +441,70 @@ function pickEvolutionMove(s: Session): string {
   return pool[idx];
 }
 
+/** Pick a move from transition history. Prefers high success_rate × improvement. */
+function pickTransitionMove(
+  transitions: TransitionCandidate[],
+  currentVoices: string[],
+): string | null {
+  if (transitions.length === 0) return null;
+
+  // Weighted random: success_rate × (1 + max(0, improvement) * 0.5)
+  const weights = transitions.map(t =>
+    t.success_rate * (1 + Math.max(0, t.avg_improvement ?? 0) * 0.5)
+  );
+  const total = weights.reduce((a, b) => a + b, 0);
+  if (total <= 0) return null;
+
+  let r = Math.random() * total;
+  for (let i = 0; i < transitions.length; i++) {
+    r -= weights[i];
+    if (r <= 0) {
+      const t = transitions[i];
+      const added = t.to_voices.filter(v => !currentVoices.includes(v));
+      const removed = currentVoices.filter(v => !t.to_voices.includes(v));
+      const changes = [
+        ...added.map(v => `Add $${v}:`),
+        ...removed.map(v => `Remove $${v}:`),
+      ].join(', ');
+      const ratingStr = t.avg_rating_after != null ? `, avg rating ~${t.avg_rating_after.toFixed(1)}` : '';
+      return `${changes} voice. Past data: ${(t.success_rate * 100).toFixed(0)}% success rate across ${t.count} tries${ratingStr}`;
+    }
+  }
+
+  return null;
+}
+
+/** Pick a voice suggestion from graph data. Returns a move string or null. */
+function pickVoiceSuggestion(
+  toAdd: VoiceSuggestion[],
+  toRemove: VoiceSuggestion[],
+  currentCount: number,
+): string | null {
+  // With many voices (5+), occasionally suggest removal
+  if (currentCount >= 5 && toRemove.length > 0 && Math.random() < 0.3) {
+    const pick = toRemove[Math.floor(Math.random() * toRemove.length)];
+    return `Remove the $${pick.voice_name}: voice — create space. Past data: simpler states without it rated avg ${pick.avg_rating?.toFixed(1) ?? 'N/A'}`;
+  }
+
+  if (toAdd.length > 0) {
+    // Weighted by rating
+    const weights = toAdd.map(s => Math.max(0, s.avg_rating ?? 0));
+    const total = weights.reduce((a, b) => a + b, 0);
+    if (total <= 0) return null;
+
+    let r = Math.random() * total;
+    for (let i = 0; i < toAdd.length; i++) {
+      r -= weights[i];
+      if (r <= 0) {
+        const pick = toAdd[i];
+        return `Add a new $${pick.voice_name}: voice. Past data: states with this voice rated avg ${pick.avg_rating?.toFixed(1) ?? 'N/A'}, best ${pick.best_rating ?? 'N/A'} (seen ${pick.appearances} times)`;
+      }
+    }
+  }
+
+  return null;
+}
+
 // ═══════════════════════════════════════════════════
 // Respond to human
 // ═══════════════════════════════════════════════════
@@ -451,7 +543,7 @@ CODE:
       s.humanEdited = false;
       addHistory(s, 'user', prompt);
       addHistory(s, 'assistant', `REASON: ${reason}\nCODE:\n${newCode}`);
-      cleanStaleVoiceRatings(s, parseVoices(newCode));
+      cleanStaleVoiceRatings(s, parseSimpleVoices(newCode));
       neon.logCommand({ session_id: s.id, command: input.command, code_before: codeBefore, code_after: newCode }).catch(e => console.error('[neon]', e.message));
       s.send({
         type: 'code_update', code: newCode, phase: 'responding',
@@ -487,8 +579,9 @@ ${examples}
 When REASON+CODE format is requested, always include both.`;
 }
 
-function buildEvolutionPrompt(skill: Skill): string {
-  return buildSystemPrompt(skill) + `
+async function buildEvolutionPrompt(skill: Skill, currentCode: string): Promise<string> {
+  const memory = await buildGraphContext(skill.id, currentCode);
+  return buildSystemPrompt(skill) + memory + `
 
 ## EVOLUTION RULES
 - Make EXACTLY ONE musical change per evolution.

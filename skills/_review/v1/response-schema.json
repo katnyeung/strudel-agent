@@ -1,0 +1,25 @@
+{
+  "move_intelligence": {
+    "groups": [
+      {
+        "group_name": "descriptive name for this group of related moves",
+        "move_types": ["move_type_1", "move_type_2"],
+        "works_when": "when/why these moves are effective (be musical, not just statistical)",
+        "avg_improvement": 0.5
+      }
+    ],
+    "top_insight": "single most important insight about what moves work and why (1-2 sentences, be specific and musical)"
+  },
+  "evolution_recipes": {
+    "recipes": [
+      {
+        "name": "recipe name (musical, e.g. 'groove-first build')",
+        "steps": ["step1_move_type", "step2_move_type"],
+        "expected_rating": 4.0,
+        "critical_step": "the step that matters most and why",
+        "description": "why this sequence works musically"
+      }
+    ],
+    "best_recipe_summary": "the most reliable path to a high-rated pattern (1-2 sentences)"
+  }
+}

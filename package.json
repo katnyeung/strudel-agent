@@ -12,6 +12,7 @@
   "dependencies": {
     "@neondatabase/serverless": "^1.0.2",
     "dotenv": "^16.4.0",
+    "neo4j-driver": "^6.0.1",
     "ws": "^8.18.0",
     "yaml": "^2.6.0"
   },

@@ -150,6 +150,7 @@ function resolveBaseUrl(config: LlmConfig): string {
     case 'ollama': return 'http://localhost:11434';
     case 'litellm': return 'http://localhost:4000';
     case 'openrouter': return 'https://openrouter.ai/api';
+    case 'xai': return 'https://api.x.ai';
     default: return 'http://localhost:4000';
   }
 }
