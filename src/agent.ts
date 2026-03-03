@@ -175,9 +175,7 @@ async function bootstrap(s: Session, llm: LlmGateway): Promise<void> {
   s.phase = 'bootstrapping';
   const skill = s.skill!;
 
-  const tempoMin = skill.tempo.min;
-  const tempoMax = skill.tempo.max;
-  const bpm = tempoMin + Math.floor(Math.random() * (tempoMax - tempoMin + 1));
+  const bpm = skill.tempo.default ?? skill.tempo.min;
   const cps = (bpm / 60 / 4).toFixed(3);
 
   // Generate a randomized first beat via LLM
@@ -560,7 +558,7 @@ CODE:
 // System prompts
 // ═══════════════════════════════════════════════════
 
-function buildSystemPrompt(skill: Skill): string {
+function buildSystemPrompt(skill: Skill, compact = false): string {
   const examples = skill.buildSequence
     .filter((s): s is BuildStep & { code: string } => !!s.code)
     .map(s => `// ${s.description}\n${s.code.trim()}`)
@@ -568,7 +566,7 @@ function buildSystemPrompt(skill: Skill): string {
 
   return `You are a music copilot inside a Strudel live coding REPL.
 
-${getBaseKnowledge()}
+${getBaseKnowledge(compact)}
 
 ## Genre Rules
 ${skill.rules}
@@ -581,7 +579,7 @@ When REASON+CODE format is requested, always include both.`;
 
 async function buildEvolutionPrompt(skill: Skill, currentCode: string): Promise<string> {
   const memory = await buildGraphContext(skill.id, currentCode);
-  return buildSystemPrompt(skill) + memory + `
+  return buildSystemPrompt(skill, true) + memory + `
 
 ## EVOLUTION RULES
 - Make EXACTLY ONE musical change per evolution.

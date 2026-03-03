@@ -18,7 +18,8 @@ import type { Skill, BuildStep } from './types.js';
  */
 
 const skills = new Map<string, Skill>();
-let baseKnowledge = '';
+let baseKnowledgeCore = '';   // strudel.md only — sent with every call
+let baseKnowledgeFull = '';   // all .md files combined — sent with bootstrap + human commands
 
 export function loadSkills(basePath: string): Map<string, Skill> {
   skills.clear();
@@ -28,18 +29,23 @@ export function loadSkills(basePath: string): Map<string, Skill> {
     return skills;
   }
 
-  // Load all .md files from _base/ as shared knowledge
+  // Load .md files from _base/ as shared knowledge
+  // Core = strudel.md only (syntax rules, output format, forbidden patterns)
+  // Full = all .md files (core + composition.md + patterns.md)
   const baseDir = path.join(basePath, '_base');
   if (fs.existsSync(baseDir)) {
     const mdFiles = fs.readdirSync(baseDir)
       .filter(f => f.endsWith('.md'))
       .sort();
-    baseKnowledge = mdFiles
-      .map(f => {
-        console.log(`[skills] loaded base knowledge: _base/${f}`);
-        return fs.readFileSync(path.join(baseDir, f), 'utf-8');
-      })
-      .join('\n\n');
+
+    const contents = new Map<string, string>();
+    for (const f of mdFiles) {
+      console.log(`[skills] loaded base knowledge: _base/${f}`);
+      contents.set(f, fs.readFileSync(path.join(baseDir, f), 'utf-8'));
+    }
+
+    baseKnowledgeCore = contents.get('strudel.md') ?? '';
+    baseKnowledgeFull = mdFiles.map(f => contents.get(f)!).join('\n\n');
   }
 
   const dirs = fs.readdirSync(basePath, { withFileTypes: true })
@@ -63,8 +69,8 @@ export function loadSkills(basePath: string): Map<string, Skill> {
   return skills;
 }
 
-export function getBaseKnowledge(): string {
-  return baseKnowledge;
+export function getBaseKnowledge(compact = false): string {
+  return compact ? baseKnowledgeCore : baseKnowledgeFull;
 }
 
 function loadSkill(skillDir: string): Skill | null {
