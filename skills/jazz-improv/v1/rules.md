@@ -11,6 +11,27 @@ breathes, pushes, pulls. Every note is a choice.
 - **Feel**: Conversational. Players respond to each other.
   Use `.sometimesBy()` for improvisation feel.
 
+## Rhythm Grid Rules (CRITICAL)
+When using .beat() for drums, ALL drum voices MUST use a 16-step grid.
+
+**Wrap-around rule**: The gap from the last hit back to step 0 must NOT be
+the shortest gap in the pattern. If it is, the loop reset sounds like a
+dropped beat.
+
+**Snare**: "4,12" — brush on 2 and 4. Gaps = 8, wrap = 8. Safe.
+  Add .degradeBy(0.15-0.2) for live feel.
+
+**Approved ride/hat patterns** (if using .beat() instead of mini-notation):
+- "0,4,8,12" — quarter notes on the ride (all gaps = 4, wrap = 4)
+- "0,2,4,6,8,10,12,14" — swing eighths (all gaps = 2, wrap = 2)
+
+**BANNED patterns**:
+- Any pattern where the last hit is step 14 or 15 with an uneven gap to 0
+
+Note: Jazz drums often use mini-notation like s("hh*4") with .swing()
+instead of .beat(). This is fine — the wrap-around rule mainly applies
+to .beat() patterns.
+
 ## Sound Palette
 - **Ride cymbal**: The timekeeper. Hi-hat at medium gain, steady.
 - **Snare**: Brush-style. Soft. On 2 and 4 but ghosted.
