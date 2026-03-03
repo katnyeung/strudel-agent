@@ -10,6 +10,29 @@ slightly imperfect, slightly worn, like a cassette played too many times.
 - **Swing**: 0.1-0.25. Always present. This is what makes it breathe.
 - **Groove**: Laid-back. Notes arrive slightly late, like a sleepy drummer.
 
+## Rhythm Grid Rules (CRITICAL)
+All drum voices MUST use .beat() with a 16-step grid. No exceptions.
+
+**Wrap-around rule**: The gap from the last hit back to step 0 must NOT be
+the shortest gap in the pattern. If it is, the loop reset sounds like a
+dropped beat.
+
+**Approved kick patterns** (all pass wrap-around rule):
+- "0,4,8,12" — four-on-the-floor (safe but less lo-fi)
+- "0,4,6,10,12" — syncopated with downbeat anchors (RECOMMENDED)
+- "0,6,10,12" — sparse and lazy, great lo-fi feel
+- "0,4,10,12" — push on the 3, relaxed pocket
+- "0,8,10,12" — half-time feel, very chill
+
+**BANNED kick patterns** (wrap-around too short):
+- "0,6,10,14" — wrap=2, FEELS LIKE LOST HALF-BEAT
+- "0,4,6,10,14" — wrap=2, same problem
+- "0,4,6,14" — wrap=2, same problem
+- Any pattern where the last hit is step 14 or 15 with first hit at 0
+
+**Snare**: Always "4,12" (backbeat on 2 and 4). Never change this.
+**Hi-hats**: "0,2,4,6,8,10,12,14" (eighth notes) or use s("hh*8").
+
 ## Sound Palette
 - **Drums**: RolandTR808 or similar warm machines. Soft kick, crispy snare.
   Hi-hats should shimmer and disappear (`degradeBy(0.15-0.3)`).
@@ -45,3 +68,4 @@ slightly imperfect, slightly worn, like a cassette played too many times.
 - No complex rhythms (keep it simple, keep it pocket)
 - No major keys (too happy — this is melancholy)
 - No sudden changes (everything fades in and out)
+- No kick on step 14 or 15 wrapping to 0 (causes lost-beat feel)

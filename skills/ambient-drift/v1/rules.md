@@ -11,6 +11,13 @@ never demanding attention.
 - **Swing**: 0 (irrelevant — there's barely rhythm)
 - **Feel**: Timeless. No beginning, no end. Listener enters mid-stream.
 
+## Rhythm Grid Rules
+Ambient rarely uses .beat() patterns. If any sparse rhythm is added:
+- ALL drum/percussion voices MUST use a 16-step grid.
+- The wrap-around gap (last hit back to step 0) must NOT be the shortest
+  gap in the pattern.
+- Prefer extremely sparse patterns: "0,8" or "0" with heavy degradeBy.
+
 ## Sound Palette
 - **Pads**: Supersaw, sine, sawtooth — all heavily filtered.
   Long sustains. Everything moves slowly (`.slow(8)` minimum).

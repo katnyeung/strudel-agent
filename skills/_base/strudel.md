@@ -98,7 +98,7 @@ $kick: sound("bd:1").beat("0,4,8,12", 16).gain(0.6)
 
 // ✅ GOOD — chords cycle every 4 bars, bass varies every 2 bars, drums constant
 $chord: chord("<Cm7 Fm7 Abmaj7 G7>").voicing().sound("sawtooth").lpf(1200).gain(0.3)
-$bass: note("<C2 ~ C2 ~ Eb2 ~ F2 ~ | C2 ~ Eb2 ~ G2 ~ F2 ~>").sound("triangle").lpf(350).gain(0.4)
+$bass: note("<C2 ~ C2 ~ Eb2 ~ F2 ~ C2 ~ Eb2 ~ G2 ~ F2 ~>").sound("triangle").lpf(350).gain(0.4)
 $kick: sound("bd:1").beat("0,4,8,12", 16).gain(0.6)
 $hat: sound("hh").beat("0,2,4,6,8,10,12,14", 16).gain(rand.range(0.1, 0.25))
 ```
@@ -109,6 +109,78 @@ Techniques to avoid the reset feeling:
 - Use rand.range() on gain/pan so each cycle sounds slightly different
 - Use .every(N, fn) to apply changes at different intervals per voice
 - Use .sometimesBy() for probabilistic variation
+
+### Rule 7: Wrap-around gap must not be the shortest gap
+When a .beat() pattern loops from the last hit back to step 0, the distance
+(called the wrap-around gap) must NOT be shorter than all other gaps in the pattern.
+If it is, the loop reset feels like a dropped beat — the downbeat arrives too early.
+
+```
+// Count the gaps between consecutive hits (including last-to-first):
+// "0,6,10,14" in 16 steps: gaps = 6, 4, 4, 2(wrap)
+//   wrap=2 is SHORTEST → BAD, feels like lost half-beat at loop point
+
+// "0,6,10,12" in 16 steps: gaps = 6, 4, 2, 4(wrap)
+//   wrap=4 is NOT shortest (2 is) → OK, loop resets smoothly
+
+// "0,4,8,12" in 16 steps: gaps = 4, 4, 4, 4(wrap)
+//   all equal → PERFECT, metronomic
+```
+
+Rule of thumb: the wrap-around gap should be >= the average gap in the pattern.
+One voice with a tight wrap is a subtle feel thing. Multiple voices with bad
+wrap-arounds will compound and the whole groove loses its anchor.
+
+### Rule 8: Step N in an N-step grid = step 0 (DOUBLE HIT BUG)
+In .beat(positions, N), valid positions are 0 through N-1.
+Step N wraps to step 0 because the grid is modular. If you include BOTH
+step 0 and step N, the downbeat fires TWICE — an audible double-hit or flam.
+
+```
+// ❌ WRONG — step 16 = step 0, so kick fires twice on the downbeat
+$kick: sound("bd:1").beat("0,4,8,11,16", 16)
+// Strudel sees this as: "0,4,8,11,0" → TWO hits at position 0
+
+// ❌ ALSO WRONG — same problem
+$hat: sound("hh").beat("0,4,8,12,16", 16)
+// Equivalent to "0,0,4,8,12" → double hit at step 0
+
+// ✅ CORRECT — positions stay within 0 to 15
+$kick: sound("bd:1").beat("0,4,8,11", 16)
+$kick: sound("bd:1").beat("0,4,8,14", 16)
+```
+
+This applies to ANY grid size: in .beat(pos, 8), valid positions are 0-7.
+Step 8 = step 0. In .beat(pos, 32), valid positions are 0-31. Step 32 = step 0.
+
+NEVER use position N in an N-step grid. Maximum position is always N-1.
+
+### Rule 9: Mask loop boundaries with randomness
+Strict repetition exposes the loop point. Even with good gap math, a perfectly
+identical kick pattern every cycle makes the reset audible. Use randomness to
+blur the boundary so each cycle sounds slightly different.
+
+Techniques:
+- **Gain variation**: `.gain(rand.range(0.45, 0.65))` — each hit at slightly
+  different volume. The loop point disappears because no two cycles sound the same.
+- **Ghost kicks**: Add a second quiet kick voice on off-positions with
+  `.degradeBy(0.5)` so it only appears half the time, filling gaps organically.
+- **degradeBy on non-essential hits**: `.degradeBy(0.1)` on the main pattern
+  occasionally drops a hit, breaking the mechanical loop feel.
+- **Filter variation**: `.lpf(rand.range(800, 2000))` — timbral changes per hit.
+
+```
+// ✅ Main kick with gain randomness
+$kick: sound("bd:2").beat("0,4,8,11", 16).bank("RolandTR808").gain(rand.range(0.45, 0.65)).lpf(sine.range(800, 2500).slow(8)).swing(0.2)
+
+// ✅ Ghost kicks filling the biggest gaps — quiet, probabilistic
+$kickghost: sound("bd:2").beat("2,9,14", 16).bank("RolandTR808").gain(rand.range(0.15, 0.25)).degradeBy(0.5).lpf(800).swing(0.2)
+```
+
+Ghost kick placement: put ghost hits in the MIDDLE of the widest gaps in
+the main pattern. For "0,4,8,11" (gaps: 4,4,3,5), the widest gap is
+11→0 (5 steps), so step 14 is the best ghost position.
+Combine with gain randomness on the main kick for maximum loop-point masking.
 
 ### Quick Reference: Events Per Cycle
 
@@ -148,6 +220,40 @@ Techniques to avoid the reset feeling:
 
 ## Drums & Samples
 
+### ⚠️ Sample naming — COLON for variants, never slash-as-path
+Sample variants use COLON notation: `"sd:2"`, `"bd:3"`, `"hh:1"`.
+The number after the colon selects a specific sample from that group.
+
+```
+// ✅ CORRECT — colon selects sample variant
+sound("sd:2")    // snare, variant 2
+sound("bd:3")    // bass drum, variant 3
+sound("hh:1")    // hi-hat, variant 1
+
+// ❌ WRONG — slash with a non-number is NOT valid sample selection
+sound("jazz/sd")   // INVALID — "jazz" is not a sample, "sd" is not a number
+sound("808/kick")  // INVALID — use .bank("RolandTR808") instead
+sound("drums/hh")  // INVALID — no folder-path syntax exists
+```
+
+To change the drum CHARACTER (e.g. 808 vs 909), use .bank():
+```
+sound("sd:2").bank("RolandTR808")   // 808-style snare
+sound("sd:2").bank("RolandTR909")   // 909-style snare
+```
+
+There is no way to combine folder-style paths with sample names.
+Always use `sound("sampleName:variant").bank("bankName")`.
+
+**NOTE**: Slash with a NUMBER (e.g. `"amen/4"`) is valid mini-notation —
+it divides the sample into N equal time slots in the cycle. This is a
+**timing/subdivision** operator, NOT a path separator:
+```
+s("amen/4").fit()    // ✅ divide amen into 4 equal time parts (valid mini-notation)
+s("breaks/2").fit()  // ✅ divide breaks into 2 equal time parts
+sound("jazz/sd")     // ❌ "sd" is not a number — this is NOT subdivision, it's just wrong
+```
+
 ### .beat() step sequencer (PREFERRED for all drum patterns)
 This is the most reliable way to write drum patterns. Positions are 0-indexed
 in a grid of N steps. All drum voices MUST use the same N value.
@@ -170,7 +276,7 @@ $rim: sound("rim").beat("4,10,14", 16).gain(0.15)              // syncopated rim
 ### .beat() with variation
 ```
 // Change hits every other bar using angle brackets:
-$kick: sound("bd:1").beat("<0,4,8,12 0,4,6,10,14>", 16).gain(0.6)
+$kick: sound("bd:1").beat("<0,4,8,12 0,4,6,10,12>", 16).gain(0.6)
 $hat: sound("hh").beat("0,2,4,6,8,10,12,14", 16).gain(rand.range(0.1, 0.25))
 ```
 
@@ -187,6 +293,47 @@ $hat: sound("hh").beat("0,2,4,6,8,10,12,14", 16).gain(rand.range(0.1, 0.25))
 - .bank("RolandTR808") — classic 808 sounds. Good for: lo-fi, soul, hip-hop.
 - .bank("RolandTR909") — classic 909 sounds. Good for: techno, house, trance.
 - Sample names: bd (bass drum), sd (snare), hh (hi-hat), cp (clap), rim (rimshot), oh (open hat).
+
+### Sample Manipulation
+These functions control how samples are played back — essential for breakbeats,
+loops, and DJ-style effects.
+
+- .fit() — makes sample fit its event duration by adjusting playback speed.
+  Essential for drum breaks and loops. Without it, long samples spill over.
+- .loopAt(N) — speed up/slow down sample to loop perfectly in N cycles.
+- .begin(0-1) — start playback from this position in the sample. 0 = start, 0.5 = middle.
+- .end(0-1) — stop playback at this position.
+- .chop(N) — slice sample into N equal pieces, played in order. Great for granular effects.
+- .slice(N, "pattern") — slice into N pieces, play them in the order specified by pattern.
+- .splice(N, "pattern") — like slice but adjusts speed to fit event duration.
+- .cut(N) — cut group: when a new sound in group N starts, the previous one stops.
+  Use .cut(1) to prevent sample overlap.
+- .speed(N) — playback speed. 1 = normal, 2 = double speed/octave up, -1 = reverse.
+- .rev() — reverse the sample.
+
+```
+// Chopped breakbeat
+$break: s("amen/4").fit().chop(16).cut(1).sometimesBy(0.5, ply("2")).gain(0.5)
+
+// Sliced break with custom order
+$break: s("amen/4").fit().slice(8, "<0 1 2 3 4*2 5 6 [6 7]>*2").cut(1).gain(0.5)
+
+// Sample start offset for texture variation
+$hat: s("hh*8").begin(rand.range(0, 0.5)).gain(0.2)
+```
+
+### Scrubbing (DJ-style sample scratching)
+- .scrub(position) — scrub through a sample like a tape loop or turntable.
+  Position (0-1) represents location in the audio file. Pattern it for movement.
+  Optional "position:speed" syntax where second value controls playback speed.
+
+```
+// DJ scratch effect — scrub through positions
+$scratch: s("breaks/2").fit().scrub("{0.1!2 .25@3 0.7!2 <0.8:1.5>}%8").gain(0.4)
+
+// Random scrub positions quantized to 16 steps
+$glitch: s("breaks/2").fit().scrub(irand(16).div(16).seg(8)).gain(0.35)
+```
 
 ## Synths
 - .sound("supersaw") — fat detuned saw, great for bass, chords, trance leads.
@@ -322,9 +469,49 @@ Always put voices with different reverb needs on different orbits.
 
 ### Distortion & Saturation
 - .distort("amount:mix") — distortion. e.g. .distort("4:.2") = heavy distortion, 20% mix.
+- .distort("amount:mix:type") — specify distortion type. Types: diode, fold, chebyshev, scurve,
+  asym, sinefold, soft, hard, cubic.
+- .diode("amount:mix") — diode clipping distortion. Warm, tube-like overdrive.
+  e.g. .diode("3:.3") = moderate diode distortion at 30% mix.
+- .fold("amount:mix") — wavefolding distortion. Creates complex harmonics.
 - .shape(0-1) — waveshaping. Subtle saturation. Good for adding warmth.
 - .crush(bits) — bit crusher. 16 = clean, 8 = digital grit, 4 = extreme.
 - .coarse(N) — sample rate reduction. Higher = more aliasing.
+
+```
+// Warm diode saturation on bass
+$bass: note("c2 c2 eb2 c2").sound("sawtooth").lpf(400).diode("2:.6").gain(0.4)
+
+// Wavefolded texture
+$texture: note("c3 e3 g3").sound("sine").fold("4:.3").slow(4).gain(0.25)
+
+// Breakbeat with gritty distortion
+$break: s("amen/4").fit().chop(16).distort("2:0.5").gain(0.4)
+```
+
+### Sidechain Ducking (pump effect)
+Sidechain ducking modulates the volume of one orbit based on another voice's hits.
+This is the classic EDM "pumping" effect where the bass/pad ducks when the kick hits.
+
+- .duckorbit(N) — target orbit N for ducking. The current voice's hits trigger the duck.
+- .duckorbit("N:M") — target multiple orbits at once.
+- .duckdepth(0-1) — how much the target volume drops. 1 = full duck, 0.5 = half.
+- .duckattack(time) — how fast the volume drops (in seconds). Shorter = snappier pump.
+- .duckrelease(time) — how fast the volume comes back up. Longer = more obvious pump.
+
+```
+// Classic sidechain pump: kick ducks the pad
+$kick: sound("bd:4").beat("0,4,8,12", 16).duckorbit(2).duckattack(0.01).duckdepth(0.8).duckrelease(0.3).gain(0.7)
+$pad: note("C4 E4 G4").sound("supersaw").slow(8).orbit(2).lpf(1200).gain(0.35)
+
+// Kick ducks multiple orbits (bass + pad)
+$kick: sound("bd:4").beat("0,4,8,12", 16).duckorbit("2:3").duckdepth(1).duckattack(0.01).gain(0.7)
+$bass: note("C2").sound("sawtooth").orbit(2).lpf(400).gain(0.4)
+$pad: note("C4 E4 G4").sound("supersaw").slow(8).orbit(3).gain(0.3)
+```
+
+⚠️ The ducked voices MUST be on the target orbit (set with .orbit(N)).
+The ducking voice triggers the effect; the target orbit's volume pumps.
 
 ### Dynamics
 - .gain(0-1) — volume. 0.3 = quiet, 0.7 = loud.
@@ -341,6 +528,8 @@ Always put voices with different reverb needs on different orbits.
 - .degradeBy(0.3) — randomly drop 30% of notes.
 - .sometimesBy(0.5, x => x.fast(2)) — 50% chance to apply effect.
 - .rarely(fn) — ~10% chance. .sometimes(fn) — ~50% chance. .often(fn) — ~75% chance.
+- .almostNever(fn) — even sparser than .rarely(). ~5-10% probability. Great for rare glitches.
+  Example: .almostNever(ply("<2 4>")) — very occasionally double or quadruple a hit.
 - rand — random 0-1 each cycle. rand.range(0.2, 0.8) — random in range.
 - irand(N) — random integer 0 to N-1.
 - perlin — smooth Perlin noise (0-1). perlin.range(lo,hi).slow(N) — smooth random drift.
@@ -349,6 +538,8 @@ Always put voices with different reverb needs on different orbits.
 - .every(N, fn) — apply function every N cycles.
 - .jux(rev) — play reversed version in opposite stereo channel.
 - .juxBy(amount, fn) — jux with stereo spread control (0-1).
+- .rib(seed, length) — rhythmic pattern transformation. Creates variations from a seed value.
+  Used internally by trancegate and other rhythm generators.
 - .mask("<0 0 1 1 1 1 1 1>/N") — mute/unmute pattern over N cycles. Good for arrangement builds.
 
 ### Fill & Sustain
@@ -498,7 +689,7 @@ Effects are applied in this order (knowing this helps avoid surprises):
 12. Phaser
 13. Post-gain
 14. Split to: dry out, delay send, reverb send
-15. Mixed per orbit
+15. Mixed per orbit (duck affects orbit-level volume here)
 
 ## Output Rules
 - First line: setcps(N) to set tempo.
@@ -506,11 +697,18 @@ Effects are applied in this order (knowing this helps avoid surprises):
 - No stack(), no variables, no comments in output code, no semicolons.
 - All parentheses must be matched.
 - All drum voices use .beat() with the SAME step count (16).
+- .beat() positions must be 0 to N-1. NEVER use position N (e.g. step 16 in a 16-step grid = step 0, causes double-hit).
 - All melodic/bass patterns use the same number of events or angle brackets.
 - Bass patterns: 4 or 8 events per cycle, NO .slow(). One bar per cycle.
 - Chord patterns: use <> angle brackets for one chord per cycle. Use .slow(N) ONLY if exactly N chords.
 - STAGGER loop lengths: chords cycle over 4 bars, bass varies over 2 bars, add .degradeBy() and rand for variety.
+- Use .gain(rand.range()) on drum voices to mask loop boundaries — strict repetition exposes the reset point.
 - register() custom functions go at the very top, before setcps().
+- Voice muting: prefix with _$ instead of $ to mute a voice without deleting it.
+  _$kick: sound("bd").beat("0,4,8,12", 16) — this voice is muted but preserved.
+- Sample variants use COLON (e.g. "sd:2"). Slash with a string (e.g. "jazz/sd") is INVALID. Slash with a number (e.g. "amen/4") is valid mini-notation subdivision.
+- .color() is VISUAL ONLY — it colors events in the browser visualizer but produces no audio effect.
+  It is optional and goes at the END of the chain. Do not confuse it with an audio function.
 - Keep it minimal — start simple, build up.
 
 ## Community Resources

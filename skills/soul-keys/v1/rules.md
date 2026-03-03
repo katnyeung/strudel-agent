@@ -10,6 +10,29 @@ everything else supports.
 - **Swing**: 0.15-0.3. Heavier than lo-fi. This is groove music.
 - **Feel**: Behind the beat. Every note lands slightly late.
 
+## Rhythm Grid Rules (CRITICAL)
+All drum voices MUST use .beat() with a 16-step grid. No exceptions.
+
+**Wrap-around rule**: The gap from the last hit back to step 0 must NOT be
+the shortest gap in the pattern. If it is, the loop reset sounds like a
+dropped beat.
+
+**Approved kick patterns** (all pass wrap-around rule):
+- "0,6,10,12" — lazy pocket, behind the beat (RECOMMENDED for soul)
+- "0,4,6,12" — grounded with ghost-note feel at 6
+- "0,4,10,12" — spacious, lets the keys breathe
+- "0,8,12" — half-time, very laid back
+- "0,4,8,12" — straight (less soul feel but safe)
+
+**BANNED kick patterns** (wrap-around too short):
+- "0,6,10,14" — wrap=2, FEELS LIKE LOST HALF-BEAT
+- "0,4,6,10,14" — wrap=2, same problem
+- Any pattern where the last hit is step 14 or 15 with first hit at 0
+
+**Snare**: Always "4,12" (backbeat on 2 and 4). Ghost notes use separate
+voice at very low gain (0.1-0.15).
+**Rim**: Use mini-notation "~ rim ~ rim" for pocket clicks, not .beat().
+
 ## Sound Palette
 - **Keys**: Sawtooth through heavy LPF (< 1200Hz) for Rhodes-like tone.
   Rich, warm, round. This is the star of the show.
@@ -43,3 +66,4 @@ everything else supports.
 - No complex drum patterns (keep it minimal)
 - No bare triads (always extend the chord)
 - No staccato keys (sustain and let them sing)
+- No kick on step 14 or 15 wrapping to 0 (causes lost-beat feel)

@@ -12,6 +12,26 @@ The groove hypnotizes.
 - **Feel**: Machine-like. Precise. The human element comes from
   what you choose to add and remove, not from timing.
 
+## Rhythm Grid Rules (CRITICAL)
+All drum voices MUST use .beat() with a 16-step grid. No exceptions.
+
+**Wrap-around rule**: The gap from the last hit back to step 0 must NOT be
+the shortest gap in the pattern. If it is, the loop reset sounds like a
+dropped beat.
+
+**Kick**: Always "0,4,8,12" — four-on-the-floor. Non-negotiable for techno.
+  This has perfect spacing: all gaps = 4 steps, wrap = 4 steps.
+
+**Approved hi-hat patterns**:
+- "2,6,10,14" — offbeat hats (RECOMMENDED, all gaps = 4, wrap = 4)
+- "0,2,4,6,8,10,12,14" — eighth-note hats (all gaps = 2, wrap = 2)
+
+**Clap/snare**: Always "4,12" (on 2 and 4). Gaps = 8, wrap = 8.
+
+**BANNED patterns**:
+- Any kick pattern other than "0,4,8,12" (techno is four-on-the-floor)
+- Any pattern where the last hit is step 14 or 15 with an uneven gap to 0
+
 ## Sound Palette
 - **Kick**: Four-on-the-floor. Non-negotiable. RolandTR909.
   Strong, present. The foundation of everything.

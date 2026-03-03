@@ -291,7 +291,7 @@ export async function getBestTransitions(
            t.success_rate AS success_rate,
            t.avg_rating_after AS avg_rating_after
     ORDER BY t.success_rate * COALESCE(t.avg_improvement, 0) DESC
-    LIMIT $limit
+    LIMIT toInteger($limit)
   `, { stateId, minCount, limit });
 
   return results.map(r => ({
@@ -333,7 +333,7 @@ export async function getSuggestedVoicesToAdd(
            avg(vs.avg_rating) AS avg_rating,
            max(vs.best_rating) AS best_rating
     ORDER BY avg_rating DESC, appearances DESC
-    LIMIT $limit
+    LIMIT toInteger($limit)
   `, { skillId, currentVoices, minVisits, limit });
 
   return results.map(r => ({
@@ -369,7 +369,7 @@ export async function getSuggestedVoicesToRemove(
            avg(vs.avg_rating) AS avg_rating,
            max(vs.best_rating) AS best_rating
     ORDER BY avg_rating DESC, appearances DESC
-    LIMIT $limit
+    LIMIT toInteger($limit)
   `, { skillId, currentVoices, minVisits, limit });
 
   return results.map(r => ({
@@ -428,7 +428,7 @@ export async function getPopularVoiceStates(
            vs.total_visits as total_visits, vs.avg_rating as avg_rating,
            vs.best_rating as best_rating
     ORDER BY vs.total_visits DESC
-    LIMIT $limit
+    LIMIT toInteger($limit)
   `, { skillId, minVisits, limit });
 
   return results.map(r => ({
