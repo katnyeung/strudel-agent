@@ -240,11 +240,12 @@ Combine with gain randomness on the main kick for maximum loop-point masking.
 - .voicing() spreads notes across octaves naturally.
 - Use angle brackets to step one chord per cycle: chord("<Dm7 G7 Cmaj7 Am7>")
 - .dict('ireal') — use iReal Pro voicing dictionary for jazz chords.
-- **CRITICAL: .voicing() chord roots — ONLY use these 7 natural notes:**
+- **CRITICAL: .voicing() chord roots — MUST be uppercase natural notes:**
   **C, D, E, F, G, A, B** — these ALWAYS work with .voicing().
+  Root letter MUST be UPPERCASE. `chord("cm")` is INVALID — use `chord("Cm")`.
   All sharps and flats (C#, Db, D#, Eb, F#, Gb, G#, Ab, A#, Bb) are UNRELIABLE and may produce "[voicing]: unknown chord" errors.
-  - ❌ BROKEN: D#maj7, A#maj7, G#maj7, Abmaj7, Ebmaj7, Bbmaj7, C#m7, F#m7
-  - ✅ SAFE: Cm7, Dm7, Em7, Fm7, Gm7, Am7, Bm7, Cmaj7, Fmaj7, Gmaj7
+  - ❌ BROKEN: cm, fm, am, D#maj7, A#maj7, G#maj7, Abmaj7, Ebmaj7, Bbmaj7, Fmaj7, C#m7, F#m7
+  - ✅ SAFE: Cm, Cm7, Dm7, Em7, Fm7, Gm7, Am7, Bm7, Cmaj7, Gmaj7
   - ALWAYS pick a key whose chords use only natural roots: C minor, D minor, F minor, G minor, A minor
   - Example progressions:
     - C minor: chord("<Cm7 Fm7 G7 Cm7>")
@@ -279,6 +280,24 @@ sound("sd:2").bank("RolandTR909")   // 909-style snare
 
 There is no way to combine folder-style paths with sample names.
 Always use `sound("sampleName:variant").bank("bankName")`.
+
+**NEVER** combine bank name + sound name into one string:
+```
+// ❌ INVALID — these sample names do not exist
+sound("RolandTR909_triangle")  // WRONG
+sound("RolandTR808_bd")        // WRONG
+sound("RolandTR909_sd")        // WRONG
+
+// ✅ CORRECT — bank is always a separate method
+sound("triangle")                         // synth oscillator
+sound("bd:1").bank("RolandTR909")         // drum with bank
+```
+
+**Valid sound names (exhaustive list):**
+- Drums: `bd`, `sd`, `hh`, `cp`, `oh`, `rim` (with optional `:N` variant)
+- Synths: `sawtooth`, `triangle`, `sine`, `square`, `supersaw`
+- Noise: `white`
+- Do NOT invent other sample names — only these exist.
 
 **NOTE**: Slash with a NUMBER (e.g. `"amen/4"`) is valid mini-notation —
 it divides the sample into N equal time slots in the cycle. This is a
@@ -378,6 +397,13 @@ $glitch: s("breaks/2").fit().scrub(irand(16).div(16).seg(8)).gain(0.35)
 - .sound("sine") — pure sine wave, good for sub bass, pads, FM source.
 - .sound("pulse") — pulse wave. Use with .dec() and .fm() for percussive tones.
 - .sound("white") — white noise. Use with .seg() and .dec() for noise hats/percussion.
+
+## Sample-Based Instruments
+- `sound("piano")` — acoustic piano from dirt-samples. Warm, natural attack and decay. Best for lo-fi, jazz, café vibes.
+- `sound("gm_epiano1")` — General MIDI electric piano. Rhodes-like, warmer than acoustic.
+- `sound("gm_epiano2")` — another electric piano variant.
+- ⚠️ `sawtooth` through LPF does NOT sound like piano — it sounds like a pipe organ. Use `sound("piano")` for piano parts.
+- ⚠️ Don't apply heavy LPF (<1500Hz) to piano samples — kills natural brightness. Keep LPF > 2000Hz or skip it.
 
 ## Timing & Rhythm
 - .slow(N) — stretch pattern over N cycles. ONLY use on chords/pads with exactly N events.

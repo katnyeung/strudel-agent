@@ -40,7 +40,7 @@ export interface TetrisConstraints {
 /** Browser → Server */
 export interface WsIncoming {
   type: 'select_skill' | 'command' | 'code_edit' | 'rate' | 'stop' | 'set_evolve_interval' | 'evolve_now'
-      | 'tetris_state' | 'tetris_restart' | 'tetris_combo' | 'toggle_evolve';
+      | 'tetris_state' | 'tetris_restart' | 'tetris_combo' | 'toggle_evolve' | 'tetris_random_speed';
   comboCount?: number;
   enabled?: boolean;
   skillId?: string;
@@ -55,8 +55,10 @@ export interface WsIncoming {
 /** Server → Browser */
 export interface WsOutgoing {
   type: 'skills_list' | 'code_update' | 'thinking' | 'agent_log' | 'error'
-      | 'tetris_next_piece' | 'tetris_spawn_piece' | 'tetris_remove_voice' | 'vocal_ready';
+      | 'tetris_next_piece' | 'tetris_spawn_piece' | 'tetris_remove_voice' | 'tetris_set_speed' | 'vocal_ready';
+  speedMs?: number;
   sampleUrl?: string;
+  sampleName?: string;       // "vocal0", "vocal1", etc.
   word?: string;
   code?: string;
   message?: string;
@@ -82,6 +84,7 @@ export interface SkillInfo {
 export interface VocalState {
   word: string;
   sampleUrl: string;       // "/samples/vocal-{ts}.mp3"
+  sampleName: string;      // "vocal0", "vocal1", etc. — unique per stack slot
   comboSize: number;        // how many lines triggered this
   ticksAlive: number;       // evolution ticks since injected
   maxTicks: number;         // 3 (normal) or 5 (big combo 10+)
@@ -112,7 +115,8 @@ export interface Session {
   tetrisConstraints: TetrisConstraints | null;
   pendingConstraints: TetrisConstraints | null;
   llmInFlight: boolean;
-  vocalState: VocalState | null;
+  vocalStack: VocalState[];
+  tetrisRandomSpeed: boolean;
 }
 
 export interface HumanInput {

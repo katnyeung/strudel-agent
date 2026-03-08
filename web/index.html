@@ -188,6 +188,7 @@
                oninput="onComboThreshold(this.value)">
         <span id="comboThresholdVal">3</span>
         <label><input type="checkbox" id="tetrisAutoReset" checked onchange="onTetrisAutoReset(this.checked)"> Auto-reset</label>
+        <label><input type="checkbox" id="tetrisRandomSpeed" onchange="onRandomSpeedToggle(this.checked)"> Randomize</label>
       </div>
     </div>
   </div>
@@ -240,7 +241,19 @@
 <script src="tetris.js"></script>
 
 <!-- Strudel REPL web component — includes CodeMirror editor, pianoroll, mini-notation highlighting -->
-<script src="https://unpkg.com/@strudel/repl@latest"></script>
+<script src="https://unpkg.com/@strudel/repl@1.2.9"></script>
+<script>
+// Load dirt-samples (includes piano, gm_epiano1, gm_epiano2, etc.)
+function loadDirtSamples() {
+  if (typeof samples === 'function') {
+    samples('github:tidalcycles/dirt-samples');
+    console.log('[samples] dirt-samples loaded (piano, epiano, etc.)');
+  } else {
+    setTimeout(loadDirtSamples, 500);
+  }
+}
+setTimeout(loadDirtSamples, 1000);
+</script>
 <script>
 const strudelEl = document.getElementById('strudelEditor');
 let isPlaying = false;
@@ -430,9 +443,17 @@ function handleMessage(msg) {
       if (tetris && msg.voiceName) tetris.removeVoice(msg.voiceName);
       break;
 
+    case 'tetris_set_speed':
+      if (tetris && msg.speedMs) {
+        tetris.setSpeed(msg.speedMs);
+        document.getElementById('tetrisSpeed').value = msg.speedMs;
+        document.getElementById('tetrisSpeedVal').textContent = msg.speedMs + 'ms';
+      }
+      break;
+
     case 'vocal_ready':
-      if (msg.sampleUrl) registerVocalSample(msg.sampleUrl);
-      addLog(`Vocal: "${msg.word}" loaded`, 'info');
+      if (msg.sampleUrl) registerVocalSample(msg.sampleUrl, msg.sampleName || 'vocal');
+      addLog(`Vocal: "${msg.word}" loaded as ${msg.sampleName || 'vocal'}`, 'info');
       break;
   }
 }
@@ -609,14 +630,15 @@ function addLog(message, type, phase, candidateNum, candidateTotal) {
 // Vocal Sample Registration
 // ══════════════════════════════════════════════════
 
-function registerVocalSample(sampleUrl) {
+function registerVocalSample(sampleUrl, sampleName) {
+  sampleName = sampleName || 'vocal';
   // Build absolute URL from relative path
   const absUrl = new URL(sampleUrl, location.origin).href;
-  // Register via Strudel's global samples() — makes s("vocal") work in patterns
+  // Register via Strudel's global samples() — makes s("vocal0") etc. work in patterns
   try {
     if (typeof samples === 'function') {
-      samples({ vocal: absUrl });
-      console.log('[vocal] Registered sample:', absUrl);
+      samples({ [sampleName]: absUrl });
+      console.log(`[vocal] Registered ${sampleName}:`, absUrl);
     } else {
       console.warn('[vocal] samples() not available yet');
     }
@@ -661,6 +683,15 @@ function initTetris() {
 function onTetrisSpeed(val) {
   document.getElementById('tetrisSpeedVal').textContent = val + 'ms';
   if (tetris) tetris.setSpeed(parseInt(val));
+}
+
+function onRandomSpeedToggle(checked) {
+  const slider = document.getElementById('tetrisSpeed');
+  slider.disabled = checked;
+  slider.style.opacity = checked ? '0.4' : '1';
+  if (ws && ws.readyState === 1) {
+    ws.send(JSON.stringify({ type: 'tetris_random_speed', enabled: checked }));
+  }
 }
 
 function onTetrisAutoReset(checked) {

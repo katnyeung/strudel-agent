@@ -5,7 +5,7 @@ import path from 'node:path';
 import { WebSocketServer, WebSocket } from 'ws';
 import { createLlm } from './llm.js';
 import { loadSkills, allSkills, getSkill, skillVersions } from './skills.js';
-import { startSession, stopSession, onSelectSkill, onCommand, onCodeEdit, onRate, onSetEvolveInterval, onEvolveNow, onToggleEvolve, onTetrisState, onTetrisRestart, onCombo } from './agent.js';
+import { startSession, stopSession, onSelectSkill, onCommand, onCodeEdit, onRate, onSetEvolveInterval, onEvolveNow, onToggleEvolve, onTetrisState, onTetrisRestart, onCombo, onTetrisRandomSpeed } from './agent.js';
 import { connectNeon, disconnectNeon } from './db/neon.js';
 import { connectNeo4j, disconnectNeo4j, setupSchema as setupNeo4jSchema, getGraphStats } from './db/neo4j.js';
 import { runAnalysis, getAnalysisStatus } from './db/analysis.js';
@@ -187,6 +187,9 @@ wss.on('connection', (ws: WebSocket) => {
           break;
         case 'tetris_combo':
           if (msg.comboCount) onCombo(id, msg.comboCount, llm);
+          break;
+        case 'tetris_random_speed':
+          onTetrisRandomSpeed(id, msg.enabled ?? false);
           break;
         case 'stop':
           stopSession(id);

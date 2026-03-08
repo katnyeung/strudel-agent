@@ -211,6 +211,7 @@ class MusicTetris {
     // External control
     this._nextPieceKey = null;   // server-set next piece
     this._spawnQueue = [];       // user-requested pieces to spawn
+    this._targetCol = undefined; // AI target column (piece slides toward it)
 
     // Canvas sizing: board + next preview + legend
     this._boardW = COLS * CELL;
@@ -329,7 +330,9 @@ class MusicTetris {
     if (!this.current) return;
     const { col, shape } = findBestMove(this.board, this.current);
     this.current.shape = shape;
-    this.current.col = col;
+    // Store target — piece will slide toward it each tick
+    this._targetCol = col;
+    // Start at spawn column, not target
   }
 
   _scheduleLoop() {
@@ -340,7 +343,23 @@ class MusicTetris {
   _tick() {
     if (!this.running || this.gameOver) return;
 
+    // Slide one column toward target each tick
+    if (this._targetCol !== undefined && this.current.col !== this._targetCol) {
+      const dir = this._targetCol > this.current.col ? 1 : -1;
+      if (!collides(this.board, this.current, 0, dir)) {
+        this.current.col += dir;
+      }
+    }
+
     if (collides(this.board, this.current, 1)) {
+      // Last-moment slide: snap to target column before locking
+      if (this._targetCol !== undefined) {
+        while (this.current.col !== this._targetCol) {
+          const dir = this._targetCol > this.current.col ? 1 : -1;
+          if (collides(this.board, this.current, 0, dir)) break;
+          this.current.col += dir;
+        }
+      }
       // Lock piece
       this.board = lockPiece(this.board, this.current);
       const { board: newBoard, cleared } = clearLines(this.board);

@@ -4,3 +4,4 @@ dist/
 *.log
 .idea/
 *.zip
+web/samples/*.mp3
