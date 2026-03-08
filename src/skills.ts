@@ -18,8 +18,9 @@ import type { Skill, BuildStep } from './types.js';
  */
 
 const skills = new Map<string, Skill>();
-let baseKnowledgeCore = '';   // strudel.md only — sent with every call
-let baseKnowledgeFull = '';   // all .md files combined — sent with bootstrap + human commands
+let baseKnowledgeCompact = ''; // strudel-compact.md — for small local models (9B etc.)
+let baseKnowledgeCore = '';    // strudel.md only — sent with every call
+let baseKnowledgeFull = '';    // all .md files combined — sent with bootstrap + human commands
 
 export function loadSkills(basePath: string): Map<string, Skill> {
   skills.clear();
@@ -44,6 +45,7 @@ export function loadSkills(basePath: string): Map<string, Skill> {
       contents.set(f, fs.readFileSync(path.join(baseDir, f), 'utf-8'));
     }
 
+    baseKnowledgeCompact = contents.get('strudel-compact.md') ?? '';
     baseKnowledgeCore = contents.get('strudel.md') ?? '';
     baseKnowledgeFull = mdFiles.map(f => contents.get(f)!).join('\n\n');
   }
@@ -69,8 +71,16 @@ export function loadSkills(basePath: string): Map<string, Skill> {
   return skills;
 }
 
-export function getBaseKnowledge(compact = false): string {
-  return compact ? baseKnowledgeCore : baseKnowledgeFull;
+/**
+ * Get base knowledge at the appropriate detail level.
+ * - 'full': all .md files (bootstrap + human commands on cloud models)
+ * - 'core': strudel.md only (evolution calls on cloud models)
+ * - 'compact': strudel-compact.md (small local models like 9B)
+ */
+export function getBaseKnowledge(level: 'full' | 'core' | 'compact' = 'full'): string {
+  if (level === 'compact') return baseKnowledgeCompact || baseKnowledgeCore;
+  if (level === 'core') return baseKnowledgeCore;
+  return baseKnowledgeFull;
 }
 
 function loadSkill(skillDir: string): Skill | null {

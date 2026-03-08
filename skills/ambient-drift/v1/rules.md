@@ -55,3 +55,11 @@ Ambient rarely uses .beat() patterns. If any sparse rhythm is added:
 - No bright sounds (filter everything aggressively)
 - No sudden changes (every transition takes 8+ bars)
 - No complexity (simplicity IS the art)
+
+## Vocal Treatment
+When a vocal sample is loaded via `samples()`, use `s("vocal")` with these effects:
+- `.loopAt(4).slow(2)` — stretch and scrub with slow movement
+- `.lpf(800)` — heavily filtered, ghostly
+- `.room(0.9)` — massive reverb wash
+- `.gain(0.1)` to `.gain(0.15)` — barely there, textural
+- Think ghostly whisper, ethereal texture — the vocal dissolves into atmosphere

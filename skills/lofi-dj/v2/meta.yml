@@ -1,0 +1,22 @@
+id: lofi-dj
+name: Lo-fi DJ
+icon: "🎧"
+version: 2
+description: >
+  Café piano lo-fi. Warm Rhodes chords lead everything — 60% of
+  the sonic space. Gentle hats shimmer behind, a soft kick anchors
+  underneath. Think rainy afternoon café, not a beat tape.
+  The piano IS the song. Everything else is atmosphere.
+tempo:
+  min: 70
+  max: 85
+  default: 78
+tags:
+  - chill
+  - café
+  - piano
+  - study
+  - ambient
+author: ambient-lofi-system
+created: 2025-02-26
+updated: 2025-03-08

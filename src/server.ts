@@ -5,7 +5,7 @@ import path from 'node:path';
 import { WebSocketServer, WebSocket } from 'ws';
 import { createLlm } from './llm.js';
 import { loadSkills, allSkills, getSkill, skillVersions } from './skills.js';
-import { startSession, stopSession, onSelectSkill, onCommand, onCodeEdit, onRate, onSetEvolveInterval, onEvolveNow } from './agent.js';
+import { startSession, stopSession, onSelectSkill, onCommand, onCodeEdit, onRate, onSetEvolveInterval, onEvolveNow, onToggleEvolve, onTetrisState, onTetrisRestart, onCombo, onTetrisRandomSpeed } from './agent.js';
 import { connectNeon, disconnectNeon } from './db/neon.js';
 import { connectNeo4j, disconnectNeo4j, setupSchema as setupNeo4jSchema, getGraphStats } from './db/neo4j.js';
 import { runAnalysis, getAnalysisStatus } from './db/analysis.js';
@@ -176,6 +176,21 @@ wss.on('connection', (ws: WebSocket) => {
         case 'evolve_now':
           onEvolveNow(id, llm);
           break;
+        case 'toggle_evolve':
+          onToggleEvolve(id, msg.enabled ?? false, llm);
+          break;
+        case 'tetris_state':
+          if (msg.constraints) onTetrisState(id, msg.constraints, llm);
+          break;
+        case 'tetris_restart':
+          onTetrisRestart(id, llm);
+          break;
+        case 'tetris_combo':
+          if (msg.comboCount) onCombo(id, msg.comboCount, llm);
+          break;
+        case 'tetris_random_speed':
+          onTetrisRandomSpeed(id, msg.enabled ?? false);
+          break;
         case 'stop':
           stopSession(id);
           break;
@@ -207,6 +222,7 @@ function serveStatic(req: http.IncomingMessage, res: http.ServerResponse, url: U
   const mimeTypes: Record<string, string> = {
     '.html': 'text/html', '.js': 'text/javascript',
     '.css': 'text/css', '.json': 'application/json',
+    '.mp3': 'audio/mpeg',
   };
 
   res.setHeader('Content-Type', mimeTypes[ext] ?? 'application/octet-stream');

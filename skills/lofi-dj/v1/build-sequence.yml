@@ -14,17 +14,17 @@ steps:
   - stage: groove
     description: "Add kick with syncopated lo-fi feel"
     code: |
-      $kick: sound("bd:1").beat("0,4,6,10,12",16).bank("RolandTR808").gain(0.6).lpf(2000)
+      $kick: sound("bd:1").beat("0,4,6,10",16).bank("RolandTR808").gain(rand.range(0.55, 0.65)).lpf(2000).swing(0.2)
 
   - stage: snare
     description: "Add snare hits"
     code: |
-      $snare: sound("sd:2").beat("4,12",16).bank("RolandTR808").gain(0.45).room(0.3)
+      $snare: sound("sd:2").beat("4,12",16).bank("RolandTR808").gain(0.45).room(0.3).swing(0.2)
 
   - stage: texture
     description: "Add hi-hats with randomness — shimmer and dust"
     code: |
-      $hat: s("hh*8").gain(rand.range(0.1,0.25)).degradeBy(0.15).lpf(3500).pan(sine.range(0.3,0.7).slow(4))
+      $hat: s("hh*8").gain(perlin.range(0.1,0.25)).degradeBy(0.15).lpf(3500).pan(sine.range(0.3,0.7).slow(4)).swing(0.2)
 
   - stage: refine
     description: "Add dust and character — more reverb, filter movement"

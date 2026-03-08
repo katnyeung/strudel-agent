@@ -109,27 +109,48 @@ function geminiGateway(config: LlmConfig): LlmGateway {
 
 function openAiCompatibleGateway(config: LlmConfig): LlmGateway {
   const baseUrl = resolveBaseUrl(config);
+  const isOllama = config.provider.toLowerCase() === 'ollama';
 
   return {
     provider: config.provider,
     async chat(systemPrompt, messages, maxTokens = 2048) {
-      const allMessages = [
-        { role: 'system' as const, content: systemPrompt },
+      const allMessages: Array<{ role: string; content: string }> = [
+        { role: 'system', content: systemPrompt },
         ...messages,
       ];
+
+      // For Qwen thinking models on Ollama: disable thinking by prefilling
+      // an empty <think> block so the model skips internal reasoning chain
+      if (isOllama) {
+        allMessages.push({ role: 'assistant', content: '<think>\n</think>\n' });
+      }
 
       const headers: Record<string, string> = { 'content-type': 'application/json' };
       if (config.apiKey) headers['authorization'] = `Bearer ${config.apiKey}`;
 
+      // Ollama/Qwen coding params: lower temp, no presence penalty, capped output
+      const temperature = isOllama ? 0.6 : 0.85;
+      const body: Record<string, unknown> = {
+        model: config.model,
+        messages: allMessages,
+        max_tokens: maxTokens,
+        temperature,
+      };
+      // Reduce context window for faster inference on local models
+      if (isOllama) {
+        body.num_ctx = 8192;
+      }
+
+      if (isOllama) {
+        const promptChars = allMessages.reduce((n, m) => n + m.content.length, 0);
+        console.log(`[llm] → ollama | model: ${config.model} | msgs: ${allMessages.length} | ~${promptChars} chars | max_tokens: ${maxTokens} | temp: ${temperature} | num_ctx: ${body.num_ctx}`);
+      }
+
+      const t0 = Date.now();
       const res = await fetch(`${baseUrl}/v1/chat/completions`, {
         method: 'POST',
         headers,
-        body: JSON.stringify({
-          model: config.model,
-          messages: allMessages,
-          max_tokens: maxTokens,
-          temperature: 0.85,
-        }),
+        body: JSON.stringify(body),
       });
 
       if (!res.ok) {
@@ -137,8 +158,15 @@ function openAiCompatibleGateway(config: LlmConfig): LlmGateway {
         throw new Error(`${config.provider} ${res.status}: ${err}`);
       }
 
+      if (isOllama) {
+        console.log(`[llm] ← ollama | ${Date.now() - t0}ms`);
+      }
+
       const data = await res.json() as any;
-      return data.choices[0]?.message?.content ?? '';
+      let content = data.choices[0]?.message?.content ?? '';
+      // Strip any leftover <think>...</think> blocks from thinking models
+      content = content.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
+      return content;
     },
   };
 }

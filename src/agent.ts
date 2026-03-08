@@ -1,5 +1,6 @@
 import type { LlmGateway } from './llm.js';
-import type { Skill, BuildStep, Session, HumanInput, WsOutgoing, ChatMessage } from './types.js';
+import type { Skill, BuildStep, Session, HumanInput, WsOutgoing, ChatMessage, TetrisConstraints, VocalState } from './types.js';
+import { generateVocal, cleanupVocal } from './vocal.js';
 import { allSkills, getSkill, getBaseKnowledge } from './skills.js';
 import { MusicTheory } from './music-theory.js';
 import * as neon from './db/neon.js';
@@ -41,9 +42,16 @@ export function startSession(id: string, send: (msg: WsOutgoing) => void): void 
     lastEvolveTime: null,
     evolveTimer: null,
     evolveInterval: EVOLVE_INTERVAL,
+    evolveEnabled: false,
     voiceRatings: new Map(),
     humanQueue: [],
     history: [],
+    tetrisActive: true,
+    tetrisConstraints: null,
+    pendingConstraints: null,
+    llmInFlight: false,
+    vocalStack: [],
+    tetrisRandomSpeed: false,
   };
   sessions.set(id, session);
 
@@ -68,6 +76,7 @@ export function stopSession(id: string): void {
     }).catch(e => console.error('[neon]', e.message));
   }
   if (s?.evolveTimer) clearTimeout(s.evolveTimer);
+  for (const v of s?.vocalStack ?? []) cleanupVocal(v.sampleUrl);
   sessions.delete(id);
 }
 
@@ -87,6 +96,11 @@ export function onSelectSkill(id: string, skillId: string, llm: LlmGateway): voi
 
   s.skill = skill;
   s.history = [];  // reset history for new skill
+  // Tetris is always initialized on skill select (browser calls initTetris()),
+  // so mark it active now so bootstrap waits for pieces instead of generating all voices
+  s.tetrisActive = true;
+  s.tetrisConstraints = null;
+  s.pendingConstraints = null;
   neon.updateSessionSkill(id, skill.id, skill.name).catch(e => console.error('[neon]', e.message));
   s.send({
     type: 'agent_log', phase: 'bootstrap',
@@ -167,6 +181,402 @@ export function onEvolveNow(id: string, llm: LlmGateway): void {
   evolutionTick(s, llm);
 }
 
+export function onToggleEvolve(id: string, enabled: boolean, llm: LlmGateway): void {
+  const s = sessions.get(id);
+  if (!s) return;
+  s.evolveEnabled = enabled;
+  if (enabled) {
+    // Start evolution loop if we have a skill and are in evolving phase
+    if (s.skill && s.phase === 'evolving' && !s.tetrisActive) {
+      scheduleEvolution(s, llm);
+    }
+    console.log(`[agent] Evolution enabled for ${id}`);
+  } else {
+    if (s.evolveTimer) { clearTimeout(s.evolveTimer); s.evolveTimer = null; }
+    console.log(`[agent] Evolution disabled for ${id}`);
+  }
+}
+
+// ═══════════════════════════════════════════════════
+// Tetris integration
+// ═══════════════════════════════════════════════════
+
+/** Piece key → voice name mapping */
+const PIECE_TO_VOICE: Record<string, string> = {
+  kick: 'kick', hat: 'hat', snare: 'snare',
+  bass: 'bass', chord: 'chord', melody: 'melody', pad: 'pad',
+};
+const VOICE_TO_PIECE: Record<string, string> = {};
+for (const [k, v] of Object.entries(PIECE_TO_VOICE)) VOICE_TO_PIECE[v] = k;
+const ALL_PIECE_KEYS = Object.keys(PIECE_TO_VOICE);
+
+export function onTetrisState(id: string, constraints: TetrisConstraints, llm: LlmGateway): void {
+  const s = sessions.get(id);
+  if (!s) return;
+
+  // Mark Tetris active on first state message
+  if (!s.tetrisActive) {
+    s.tetrisActive = true;
+    // Stop evolution loop — pieces drive regeneration
+    if (s.evolveTimer) { clearTimeout(s.evolveTimer); s.evolveTimer = null; }
+    console.log('[agent] Tetris mode activated');
+  }
+
+  s.tetrisConstraints = constraints;
+
+  // Skip regeneration if board is empty (e.g. after restart, before first piece)
+  if (!constraints.activeVoices || constraints.activeVoices.length === 0) {
+    return;
+  }
+
+  // Debounce: if LLM call in flight, store as pending
+  if (s.llmInFlight) {
+    s.pendingConstraints = constraints;
+    return;
+  }
+
+  regenerateFromConstraints(s, llm);
+
+  // Predict next piece for the browser
+  predictNextPiece(s);
+}
+
+export function onTetrisRestart(id: string, llm: LlmGateway): void {
+  const s = sessions.get(id);
+  if (!s) return;
+  s.tetrisConstraints = null;
+  s.pendingConstraints = null;
+  s.send({ type: 'agent_log', message: 'Tetris reset — waiting for first piece...' });
+}
+
+export function onTetrisRandomSpeed(id: string, enabled: boolean): void {
+  const s = sessions.get(id);
+  if (!s) return;
+  s.tetrisRandomSpeed = enabled;
+  console.log(`[agent] Tetris random speed: ${enabled}`);
+}
+
+function computeTetrisSpeed(constraints: TetrisConstraints): number {
+  const cells = constraints.totalCells;
+  // Few cells (<5) → fast drops (~400-700ms), rushing to fill the board
+  // Medium (5-20) → moderate (~800-2000ms)
+  // Dense (>20) → slower base (~2000-4000ms) with heavy randomness
+  const base = 400 + (cells * 120);
+  const jitterRange = cells > 20 ? 0.5 : cells > 10 ? 0.25 : 0.1;
+  const jitter = 1 - jitterRange + Math.random() * jitterRange * 2;
+  return Math.max(300, Math.min(5000, Math.round(base * jitter)));
+}
+
+const MAX_VOCAL_STACK = 4;
+
+export async function onCombo(id: string, comboCount: number, llm: LlmGateway): Promise<void> {
+  const s = sessions.get(id);
+  if (!s || !s.skill) return;
+
+  // If stack is full, remove the oldest vocal
+  if (s.vocalStack.length >= MAX_VOCAL_STACK) {
+    const oldest = s.vocalStack.shift()!;
+    cleanupVocal(oldest.sampleUrl);
+    console.log(`[agent] Vocal stack full, removed oldest: "${oldest.word}"`);
+  }
+
+  const slotIndex = s.vocalStack.length;
+  const sampleName = `vocal${slotIndex}`;
+
+  console.log(`[agent] Combo x${comboCount} — generating vocal phrase (slot ${sampleName})`);
+  s.send({ type: 'agent_log', message: `Combo x${comboCount}! Generating vocal phrase...` });
+
+  try {
+    // LLM generates a short spoken phrase fitting the genre mood
+    const phrasePrompt = `Write a short spoken phrase (3-8 words) that fits the mood of ${s.skill.name} music. This will be spoken aloud as a vocal sample layered into the track — like a DJ drop, a poetic whisper, or a hypnotic mantra. Reply with ONLY the phrase, nothing else.`;
+    const phrase = (await llm.chat(
+      `You are a music producer writing vocal phrases for electronic/ambient tracks. Write evocative, atmospheric phrases — not just single words. Examples: "lost in the echo", "we drift through the static", "breathe into the night", "feel the pulse rising". Reply with only the phrase.`,
+      [{ role: 'user', content: phrasePrompt }],
+      60,
+    )).trim().replace(/[^a-zA-Z\s'-]/g, '').slice(0, 80) || 'lost in the echo';
+
+    const { url } = await generateVocal(phrase);
+    const vocal: VocalState = {
+      word: phrase,
+      sampleUrl: url,
+      sampleName,
+      comboSize: comboCount,
+      ticksAlive: 0,
+      maxTicks: comboCount >= 10 ? 8 : 5,
+      injected: false,
+    };
+    s.vocalStack.push(vocal);
+    s.send({ type: 'vocal_ready', sampleUrl: url, word: phrase, sampleName, message: `Vocal "${phrase}" ready as ${sampleName} — will be woven into next evolution` });
+    console.log(`[agent] Vocal "${phrase}" ready at ${url} as ${sampleName}, maxTicks=${vocal.maxTicks}`);
+  } catch (e: any) {
+    console.error('[agent] Vocal generation failed:', e.message);
+    s.send({ type: 'agent_log', message: `Vocal generation failed: ${e.message}` });
+  }
+}
+
+async function regenerateFromConstraints(s: Session, llm: LlmGateway): Promise<void> {
+  if (!s.skill || !s.tetrisConstraints) return;
+  const constraints = s.tetrisConstraints;
+
+  s.llmInFlight = true;
+  s.send({ type: 'thinking', phase: 'evolving', message: `Regenerating with constraints: ${constraints.activeVoices.join(', ')} (${constraints.totalCells} cells)` });
+  console.log(`[agent] Regenerating with constraints:`, constraints.voices);
+
+  const constraintBlock = buildConstraintBlock(constraints, s.vocalStack.length > 0);
+  const theoryCtx = buildTheoryContext(s.skill, constraints.activeVoices.join(' '));
+  const vocalCtx = buildVocalContext(s);
+
+  const ratingCtx = s.lastRating !== null
+    ? `\nListener feedback: rated ${s.lastRating}/5${s.lastRating <= 2 ? ' — they don\'t like the current direction, make a significant change' : s.lastRating >= 4 ? ' — they like this direction, keep the vibe' : ''}\n`
+    : '';
+  // Consume the overall rating — it's one-shot feedback for this cycle
+  s.lastRating = null;
+
+  let voiceCtx = '';
+  if (s.voiceRatings.size > 0) {
+    const lines: string[] = [];
+    for (const [name, vr] of s.voiceRatings) {
+      if (vr <= 2) lines.push(`$${name}: disliked — change its sound, rhythm, or pattern`);
+      else if (vr >= 4) lines.push(`$${name}: liked — keep it as-is`);
+      else lines.push(`$${name}: neutral`);
+    }
+    voiceCtx = `\nPer-voice feedback (one-time, applied this cycle only):\n${lines.join('\n')}\n`;
+  }
+  // Consume voice ratings after building the prompt — they're one-shot feedback
+  s.voiceRatings.clear();
+
+  const range = cpsRange(s.skill);
+
+  const voiceList = constraints.activeVoices.map(v => `$${v}`).join(', ');
+
+  const prompt = `${constraintBlock}
+
+IMPORTANT: Output ONLY these voices: ${voiceList}. Do NOT output any other voices.
+${theoryCtx}${ratingCtx}${voiceCtx}
+Generate Strudel code for ${s.skill.name} using ONLY the allowed voices above.
+Each voice's note count must not exceed its cell count.
+TEMPO: setcps() uses cycles-per-second, NOT BPM. Formula: BPM/60/4.
+Valid range: setcps(${range.min}) to setcps(${range.max}).
+Example: 78 BPM = setcps(${range.default}), NOT setcps(78).
+${vocalCtx}
+Reply in this EXACT format:
+REASON: (one sentence about your musical choice)
+CODE:
+setcps(value between ${range.min} and ${range.max})
+${constraints.activeVoices.map(v => `$${v}: ...`).join('\n')}`;
+
+  try {
+    // Tetris regeneration is stateless — no history needed.
+    // Current code is already in the prompt, history just wastes tokens.
+    const messages: ChatMessage[] = [{ role: 'user', content: prompt }];
+    const systemPrompt = buildTetrisSystemPrompt(s.skill!, constraints.activeVoices, llm.provider);
+    const result = await llm.chat(systemPrompt, messages);
+    console.log('[agent] LLM raw response (first 300 chars):', result.substring(0, 300));
+    const { reason, code: rawCode } = parseReasonCode(result);
+    console.log('[agent] Parsed reason:', reason || '(empty)');
+    // Always enforce correct cps — LLM often writes BPM instead
+    const fixedCode = rawCode ? fixCps(rawCode, s.skill!) : rawCode;
+    // Strip any voices not in constraints (small models ignore instructions)
+    const code = fixedCode ? filterToAllowedVoices(fixedCode, constraints.activeVoices, s.vocalStack) : fixedCode;
+
+    if (code && /\$\w+:/.test(code)) {
+      const codeBefore = s.currentCode;
+      s.currentCode = code;
+      const voices = parseSimpleVoices(code);
+      cleanStaleVoiceRatings(s, voices);
+      neon.logEvolution({ session_id: s.id, phase: 'tetris', code_before: codeBefore, code_after: code, voices, voice_count: voices.length, reason }).catch(e => console.error('[neon]', e.message));
+      updateVocalStack(s, code);
+      s.send({
+        type: 'code_update', code, phase: 'evolving',
+        message: `🎮 ${reason || 'Regenerated from Tetris constraints'}`,
+      });
+
+      if (s.tetrisRandomSpeed && s.tetrisConstraints) {
+        const speedMs = computeTetrisSpeed(s.tetrisConstraints);
+        s.send({ type: 'tetris_set_speed', speedMs });
+      }
+    }
+  } catch (e: any) {
+    console.error('[agent] tetris regeneration failed:', e.message);
+    s.send({ type: 'error', message: `Regeneration failed: ${e.message}` });
+  }
+
+  s.llmInFlight = false;
+
+  // Process pending constraints if any
+  if (s.pendingConstraints) {
+    const pending = s.pendingConstraints;
+    s.pendingConstraints = null;
+    s.tetrisConstraints = pending;
+    if (pending.activeVoices.length > 0) {
+      regenerateFromConstraints(s, llm);
+    }
+  }
+}
+
+function buildVocalContext(s: Session): string {
+  if (s.vocalStack.length === 0) return '';
+
+  const sections: string[] = [];
+  const toInject = s.vocalStack.filter(v => !v.injected);
+  const active = s.vocalStack.filter(v => v.injected && v.ticksAlive < v.maxTicks);
+  const expired = s.vocalStack.filter(v => v.injected && v.ticksAlive >= v.maxTicks);
+
+  if (toInject.length > 0) {
+    const examples = toInject.map(v =>
+      `$${v.sampleName}: s("${v.sampleName}").loopAt(2).chop(16).sometimes(rev).degradeBy(0.3).room(0.6).gain(0.45)`
+    ).join('\n');
+    sections.push(`## MANDATORY — INJECT NEW VOCALS
+${toInject.length} new vocal sample(s) are pre-loaded. You MUST add each as a voice.
+The sample name inside s() MUST be exactly: ${toInject.map(v => `"${v.sampleName}"`).join(', ')}
+NEVER put the spoken phrase inside s(). ONLY use the sample name.
+WRONG: s("feel the rhythm") — this will not work
+CORRECT: s("${toInject[0].sampleName}") — use this exact name
+
+Copy one of these lines exactly:
+${examples}
+
+Add them as the LAST voice lines. These are NOT Tetris voices — they are bonus combo vocals.`);
+  }
+
+  if (active.length > 0) {
+    const keepList = active.map(v => `$${v.sampleName} (${v.maxTicks - v.ticksAlive} ticks left)`).join(', ');
+    sections.push(`## MANDATORY — KEEP ACTIVE VOCALS
+Keep these vocal voices in your output: ${keepList}
+Use s("${active[0].sampleName}") — the EXACT sample name, not the spoken phrase.
+You may change their effects. Do NOT remove them yet.`);
+  }
+
+  if (expired.length > 0) {
+    const removeList = expired.map(v => `$${v.sampleName}`).join(', ');
+    sections.push(`## MANDATORY — REMOVE EXPIRED VOCALS
+Remove these vocal voices: ${removeList}. They have expired.`);
+  }
+
+  return '\n' + sections.join('\n\n') + '\n';
+}
+
+function updateVocalStack(s: Session, code: string): void {
+  for (const v of s.vocalStack) {
+    if (!v.injected && code.includes(`$${v.sampleName}:`)) {
+      v.injected = true;
+      // Don't count the injection tick — decay starts next regeneration
+      continue;
+    }
+    if (v.injected) {
+      v.ticksAlive++;
+    }
+  }
+
+  // Remove expired vocals
+  const expired = s.vocalStack.filter(v => v.injected && v.ticksAlive >= v.maxTicks);
+  for (const v of expired) {
+    cleanupVocal(v.sampleUrl);
+    console.log(`[agent] Vocal "${v.word}" (${v.sampleName}) decayed and cleaned up`);
+  }
+  s.vocalStack = s.vocalStack.filter(v => !(v.injected && v.ticksAlive >= v.maxTicks));
+}
+
+function densityHint(voice: string, count: number): string {
+  const isDrum = ['kick', 'snare', 'hat', 'perc', 'rim'].includes(voice);
+  if (isDrum) {
+    // Drums: more cells = more beat positions in 16-step grid
+    if (count >= 16) return `→ dense: use 8-12 beat positions`;
+    if (count >= 8) return `→ medium: use 4-8 beat positions`;
+    if (count >= 4) return `→ light: use 2-4 beat positions`;
+    return `→ sparse: use 1-2 beat positions`;
+  }
+  // Melodic: more cells = more notes (power-of-2)
+  if (count >= 12) return `→ use 8 notes (rich pattern)`;
+  if (count >= 6) return `→ use 4 notes`;
+  if (count >= 3) return `→ use 2 notes`;
+  return `→ use 1 note`;
+}
+
+function buildConstraintBlock(constraints: TetrisConstraints, hasVocal = false): string {
+  const lines = constraints.activeVoices.map(v => {
+    const count = constraints.voices[v] || 0;
+    const hint = densityHint(v, count);
+    return `- $${v}: ${count} cells ${hint}`;
+  });
+  const vocalNote = hasVocal
+    ? '\nException: $vocalN: voices are EXEMPT from these constraints — they come from combo vocal samples, not Tetris pieces. Always include them when the VOCAL section says so.'
+    : '';
+  return `## TETRIS CONSTRAINTS (STRICT)
+Allowed voices (more cells = denser/richer patterns):
+${lines.join('\n')}
+Do NOT use any voice type not listed here.
+Drums: use .beat(positions, 16) — scale the number of positions with cell count.
+Melodic/bass/pad: use power-of-2 note counts (1, 2, 4, or 8) with ~ rests. Pick the largest power-of-2 that fits the cell count.${vocalNote}
+Total cells: ${constraints.totalCells}`;
+}
+
+async function predictNextPiece(s: Session): Promise<void> {
+  // 70% Neo4j suggestion, 30% random
+  if (Math.random() < 0.3) {
+    const key = ALL_PIECE_KEYS[Math.floor(Math.random() * ALL_PIECE_KEYS.length)];
+    s.send({ type: 'tetris_next_piece', pieceKey: key });
+    return;
+  }
+
+  try {
+    const currentVoices = s.tetrisConstraints?.activeVoices || [];
+    const suggestions = await getSuggestedVoicesToAdd(s.skill!.id, currentVoices, 1, 5);
+    if (suggestions.length > 0) {
+      // Pick weighted by rating
+      const pick = suggestions[Math.floor(Math.random() * Math.min(3, suggestions.length))];
+      const pieceKey = VOICE_TO_PIECE[pick.voice_name];
+      if (pieceKey) {
+        s.send({ type: 'tetris_next_piece', pieceKey });
+        console.log(`[agent] Neo4j suggests next piece: ${pieceKey} (${pick.voice_name})`);
+        return;
+      }
+    }
+  } catch (e: any) {
+    console.error('[agent] Neo4j prediction failed:', e.message);
+  }
+
+  // Fallback: random
+  const key = ALL_PIECE_KEYS[Math.floor(Math.random() * ALL_PIECE_KEYS.length)];
+  s.send({ type: 'tetris_next_piece', pieceKey: key });
+}
+
+// ═══════════════════════════════════════════════════
+// Board command classification (for human commands when Tetris active)
+// ═══════════════════════════════════════════════════
+
+const BOARD_ADD_RE = /\b(?:add|more|spawn|drop|give me|want)\s+(?:a\s+)?(\w+)/i;
+const BOARD_REMOVE_RE = /\b(?:remove|delete|clear|kill|drop|no more)\s+(?:the\s+)?(?:all\s+)?(\w+)/i;
+const VOICE_NAMES = new Set(['kick', 'hat', 'snare', 'bass', 'chord', 'melody', 'pad', 'bd', 'hh']);
+
+interface BoardCommand {
+  action: 'add' | 'remove' | 'music';
+  voice?: string;
+}
+
+function classifyBoardCommand(command: string): BoardCommand {
+  // Try "remove" first (more specific)
+  const removeMatch = command.match(BOARD_REMOVE_RE);
+  if (removeMatch) {
+    const word = removeMatch[1].toLowerCase();
+    if (VOICE_NAMES.has(word)) return { action: 'remove', voice: word };
+    // Alias: bd→kick, hh→hat
+    if (word === 'bd') return { action: 'remove', voice: 'kick' };
+    if (word === 'hh') return { action: 'remove', voice: 'hat' };
+  }
+
+  // Try "add"
+  const addMatch = command.match(BOARD_ADD_RE);
+  if (addMatch) {
+    const word = addMatch[1].toLowerCase();
+    if (VOICE_NAMES.has(word)) return { action: 'add', voice: word };
+    if (word === 'bd') return { action: 'add', voice: 'kick' };
+    if (word === 'hh') return { action: 'add', voice: 'hat' };
+  }
+
+  return { action: 'music' };
+}
+
 // ═══════════════════════════════════════════════════
 // Phase 1: BOOTSTRAP — start with one simple voice
 // ═══════════════════════════════════════════════════
@@ -178,13 +588,30 @@ async function bootstrap(s: Session, llm: LlmGateway): Promise<void> {
   const bpm = skill.tempo.default ?? skill.tempo.min;
   const cps = (bpm / 60 / 4).toFixed(3);
 
-  // Generate a randomized first beat via LLM
+  // Tetris mode: skip LLM call — just set tempo and wait for pieces
+  if (s.tetrisActive) {
+    const startCode = `setcps(${cps})`;
+    s.currentCode = startCode;
+    s.send({
+      type: 'code_update', code: startCode, phase: 'bootstrap',
+      message: `${skill.icon} ${skill.name} at ${bpm} BPM — Tetris pieces will build the music.`,
+    });
+    s.send({
+      type: 'agent_log', phase: 'evolving',
+      message: "Tetris is driving the music — pieces = instruments. Talk to me anytime.",
+    });
+    s.phase = 'evolving';
+    if (s.humanQueue.length > 0) await respondToHuman(s, llm);
+    return;
+  }
+
+  // Normal mode: generate a first beat via LLM
   s.send({ type: 'thinking', phase: 'bootstrap', message: `Generating a fresh ${skill.name} beat at ${bpm} BPM...` });
 
   const theoryCtx = buildTheoryContext(skill, 'chord melody bass kick');
 
   const prompt = `Generate a fresh starting pattern for ${skill.name} at ${bpm} BPM.
-Pick a random key from: C, D, Eb, F, G, Ab, Bb — don't always use the same one.
+Pick a random key from: C, D, F, G, A — don't always use the same one.
 Start with 2-3 voices (e.g. a rhythm + a harmonic element). Keep it simple but musical.
 Make it sound different each time — vary the rhythms, chord voicings, sound choices, effects.
 Add .color("colorname") to every voice for visual distinction. Add ._pianoroll() to one melodic voice.
@@ -196,7 +623,7 @@ setcps(${cps})
 (2-3 $name: voices)`;
 
   try {
-    const result = await llm.chat(buildSystemPrompt(skill), [{ role: 'user', content: prompt }]);
+    const result = await llm.chat(buildSystemPrompt(skill, false, llm.provider), [{ role: 'user', content: prompt }]);
     const { reason, code } = parseReasonCode(result);
 
     if (code && /\$\w+:/.test(code)) {
@@ -239,7 +666,9 @@ setcps(${cps})
 
   s.send({
     type: 'agent_log', phase: 'evolving',
-    message: "I'll evolve this every ~60s. Talk to me anytime to steer the music.",
+    message: s.evolveEnabled
+      ? "I'll evolve this every ~60s. Talk to me anytime to steer the music."
+      : "Evolution is off. Enable it with the checkbox, or talk to me anytime.",
   });
 
   // Drain any queued commands
@@ -260,6 +689,7 @@ function startEvolutionLoop(s: Session, llm: LlmGateway): void {
 
 function scheduleEvolution(s: Session, llm: LlmGateway): void {
   if (s.evolveTimer) clearTimeout(s.evolveTimer);
+  if (!s.evolveEnabled) return;
   s.evolveTimer = setTimeout(() => evolutionTick(s, llm), s.evolveInterval);
 }
 
@@ -301,12 +731,19 @@ async function evolutionTick(s: Session, llm: LlmGateway): Promise<void> {
     voiceCtx = `\nPer-voice feedback:\n${lines.join('\n')}\n`;
   }
 
+  const vocalCtx = buildVocalContext(s);
+
+  const evolveRange = cpsRange(s.skill!);
+  const currentCpsVal = extractCps(s.currentCode) || evolveRange.default;
+
   const prompt = `Current code:
 ${s.currentCode}
 
 Musician move: ${move}
-${theoryCtx}${ratingCtx}${voiceCtx}
+${theoryCtx}${ratingCtx}${voiceCtx}${vocalCtx}
 Apply this ONE change. You may add a new $: voice, modify an existing voice, or tweak parameters. Keep all other voices intact.
+TEMPO: Keep setcps(${currentCpsVal}) or vary slightly within ${evolveRange.min}-${evolveRange.max}.
+setcps uses cycles-per-second (NOT BPM). NEVER put BPM in setcps.
 
 Reply in this format:
 REASON: (one sentence — your musical reasoning)
@@ -316,9 +753,10 @@ CODE:
   const codeBefore = s.currentCode;
 
   try {
-    const messages: ChatMessage[] = [...getHistory(s), { role: 'user', content: prompt }];
-    const result = await llm.chat(await buildEvolutionPrompt(s.skill!, s.currentCode), messages);
-    const { reason, code } = parseReasonCode(result);
+    const messages: ChatMessage[] = [...getHistory(s, llm.provider), { role: 'user', content: prompt }];
+    const result = await llm.chat(await buildEvolutionPrompt(s.skill!, s.currentCode, llm.provider), messages);
+    const { reason, code: rawCode } = parseReasonCode(result);
+    const code = rawCode ? fixCps(rawCode, s.skill!) : rawCode;
 
     if (code && /\$\w+:/.test(code)) {
       s.currentCode = code;
@@ -328,6 +766,7 @@ CODE:
       addHistory(s, 'assistant', `REASON: ${reason}\nCODE:\n${code}`);
       const voices = parseSimpleVoices(code);
       cleanStaleVoiceRatings(s, voices);
+      updateVocalStack(s, code);
       neon.logEvolution({ session_id: s.id, phase: 'evolving', move_type: move, code_before: codeBefore, code_after: code, voices, voice_count: voices.length, reason }).catch(e => console.error('[neon]', e.message));
       s.send({
         type: 'code_update', code, phase: 'evolving',
@@ -513,15 +952,49 @@ async function respondToHuman(s: Session, llm: LlmGateway): Promise<void> {
 
   s.send({ type: 'thinking', phase: 'responding', message: `Hearing you: "${truncate(input.command, 60)}"` });
 
+  // ── Tetris board command handling ──
+  if (s.tetrisActive) {
+    const cmd = classifyBoardCommand(input.command);
+    if (cmd.action === 'add' && cmd.voice) {
+      const pieceKey = VOICE_TO_PIECE[cmd.voice] || cmd.voice;
+      if (ALL_PIECE_KEYS.includes(pieceKey)) {
+        s.send({ type: 'tetris_spawn_piece', pieceKey });
+        s.send({ type: 'agent_log', phase: 'responding', message: `Spawning ${cmd.voice} piece on the board...` });
+        // Also respond musically within current constraints
+      } else {
+        s.send({ type: 'agent_log', message: `Unknown voice "${cmd.voice}" — treating as music command.` });
+      }
+    } else if (cmd.action === 'remove' && cmd.voice) {
+      s.send({ type: 'tetris_remove_voice', voiceName: cmd.voice });
+      s.send({ type: 'agent_log', phase: 'responding', message: `Removing ${cmd.voice} from the board...` });
+      // Browser will remove cells and send updated tetris_state → triggers regeneration
+      neon.logCommand({ session_id: s.id, command: input.command }).catch(e => console.error('[neon]', e.message));
+      return;
+    }
+    // For 'music' or 'add' (which also gets a music response), fall through with constraints
+  }
+
   const code = input.currentCode ?? s.currentCode;
   const theoryCtx = s.skill ? buildTheoryContext(s.skill, input.command) : '';
+  const constraintCtx = s.tetrisActive && s.tetrisConstraints
+    ? '\n' + buildConstraintBlock(s.tetrisConstraints, s.vocalStack.length > 0) + '\n'
+    : '';
+
+  const humanRange = s.skill ? cpsRange(s.skill) : null;
+  const humanCurrentCps = extractCps(code) || humanRange?.default;
+  const humanCpsLine = humanRange
+    ? `TEMPO: Keep setcps(${humanCurrentCps}) unless the human asks for a tempo change. Valid range: ${humanRange.min}-${humanRange.max}.\nsetcps uses cycles-per-second (NOT BPM). NEVER put BPM in setcps.`
+    : '';
 
   const prompt = `Human says: "${input.command}"
 
 Current code:
 ${code || '(nothing playing)'}
-${theoryCtx}
-Apply their request musically. You may add, modify, or remove $: voices.
+${theoryCtx}${constraintCtx}
+Apply their request musically. You may add, modify, or remove $: voices.${
+  s.tetrisActive ? '\nRespect the TETRIS CONSTRAINTS above — only use allowed voices.' : ''
+}
+${humanCpsLine}
 
 Reply in this format:
 REASON: (one sentence — what you changed and why)
@@ -529,9 +1002,12 @@ CODE:
 (complete updated Strudel code — setcps line + all $: voices)`;
 
   try {
-    const messages: ChatMessage[] = [...getHistory(s), { role: 'user', content: prompt }];
-    const result = await llm.chat(buildSystemPrompt(s.skill!), messages);
-    const { reason, code: newCode } = parseReasonCode(result);
+    const messages: ChatMessage[] = [...getHistory(s, llm.provider), { role: 'user', content: prompt }];
+    const result = await llm.chat(buildSystemPrompt(s.skill!, false, llm.provider), messages);
+    const { reason, code: rawNewCode } = parseReasonCode(result);
+    // Fix cps unless user explicitly asked for tempo change
+    const isTempCmd = /\b(tempo|bpm|speed|faster|slower|cps)\b/i.test(input.command);
+    const newCode = rawNewCode && s.skill && !isTempCmd ? fixCps(rawNewCode, s.skill) : rawNewCode;
 
     if (newCode) {
       const codeBefore = code;
@@ -558,15 +1034,21 @@ CODE:
 // System prompts
 // ═══════════════════════════════════════════════════
 
-function buildSystemPrompt(skill: Skill, compact = false): string {
+function isSmallModel(provider: string): boolean {
+  return provider.toLowerCase() === 'ollama';
+}
+
+function buildSystemPrompt(skill: Skill, compact = false, provider = ''): string {
+  const small = isSmallModel(provider);
+  const knowledgeLevel = small ? 'compact' : (compact ? 'core' : 'full');
   const examples = skill.buildSequence
     .filter((s): s is BuildStep & { code: string } => !!s.code)
     .map(s => `// ${s.description}\n${s.code.trim()}`)
     .join('\n\n');
 
   return `You are a music copilot inside a Strudel live coding REPL.
-
-${getBaseKnowledge(compact)}
+${small ? '\nIMPORTANT: Output ONLY Strudel code. NEVER write JavaScript functions, variables, or comments. Each line starts with $name: followed by a method chain.\n' : ''}
+${getBaseKnowledge(knowledgeLevel)}
 
 ## Genre Rules
 ${skill.rules}
@@ -577,9 +1059,58 @@ ${examples}
 When REASON+CODE format is requested, always include both.`;
 }
 
-async function buildEvolutionPrompt(skill: Skill, currentCode: string): Promise<string> {
+function buildTetrisSystemPrompt(skill: Skill, allowedVoices: string[], provider = ''): string {
+  const small = isSmallModel(provider);
+  const knowledgeLevel = small ? 'compact' : 'core';
+
+  // Only include examples that match allowed voice names
+  const allowedSet = new Set(allowedVoices);
+  const examples = skill.buildSequence
+    .filter((s): s is BuildStep & { code: string } => !!s.code)
+    .filter(s => {
+      const voiceMatch = s.code.match(/\$(\w+):/);
+      return voiceMatch && allowedSet.has(voiceMatch[1]);
+    })
+    .map(s => s.code.trim())
+    .join('\n');
+
+  const voiceList = allowedVoices.map(v => `$${v}`).join(', ');
+
+  return `You are a music copilot inside a Strudel live coding REPL.
+
+CRITICAL RULE: You may ONLY output these voices: ${voiceList}
+Any other voice ($kick, $bass, $snare, etc.) is FORBIDDEN unless listed above.
+Output ONLY the allowed voices. Do NOT copy voices from examples that are not in the allowed list.
+
+${getBaseKnowledge(knowledgeLevel)}
+
+## Genre Rules
+${skill.rules}
+
+${examples ? `## Example Voices (for reference — only use allowed voices)\n${examples}` : ''}
+
+Always output in REASON: / CODE: format.`;
+}
+
+/** Remove any $voice: lines not in the allowed list (safety net for small models) */
+function filterToAllowedVoices(code: string, allowedVoices: string[], vocalStack: VocalState[]): string {
+  const allowed = new Set(allowedVoices);
+  // Also allow vocal voices
+  for (const v of vocalStack) allowed.add(v.sampleName);
+
+  const lines = code.split('\n');
+  const filtered = lines.filter(line => {
+    const match = line.match(/^\s*\$(\w+):/);
+    if (!match) return true; // keep setcps, register, etc.
+    return allowed.has(match[1]);
+  });
+
+  return filtered.join('\n');
+}
+
+async function buildEvolutionPrompt(skill: Skill, currentCode: string, provider = ''): Promise<string> {
   const memory = await buildGraphContext(skill.id, currentCode);
-  return buildSystemPrompt(skill, true) + memory + `
+  return buildSystemPrompt(skill, true, provider) + memory + `
 
 ## EVOLUTION RULES
 - Make EXACTLY ONE musical change per evolution.
@@ -592,17 +1123,19 @@ async function buildEvolutionPrompt(skill: Skill, currentCode: string): Promise<
 // Conversation history
 // ═══════════════════════════════════════════════════
 
-const MAX_HISTORY = 20;  // keep last 20 messages (10 exchanges)
+const MAX_HISTORY_CLOUD = 20;  // keep last 20 messages (10 exchanges) for cloud models
+const MAX_HISTORY_LOCAL = 4;   // keep last 4 messages (2 exchanges) for small local models
 
 function addHistory(s: Session, role: 'user' | 'assistant', content: string): void {
   s.history.push({ role, content });
-  // Trim oldest messages if over limit
-  while (s.history.length > MAX_HISTORY) {
-    s.history.shift();
-  }
 }
 
-function getHistory(s: Session): ChatMessage[] {
+function getHistory(s: Session, provider = ''): ChatMessage[] {
+  const maxHistory = isSmallModel(provider) ? MAX_HISTORY_LOCAL : MAX_HISTORY_CLOUD;
+  // Trim oldest messages if over limit
+  while (s.history.length > maxHistory) {
+    s.history.shift();
+  }
   return [...s.history];
 }
 
@@ -671,6 +1204,7 @@ function cleanCode(raw: string): string {
     .replace(/```\s*/g, '')
     .replace(/\r\n/g, '\n')
     .replace(/^\s*\/\/.*$/gm, '')
+    .replace(/^\s*#.*$/gm, '')
     .replace(/^REASON:.*$/gm, '')
     .replace(/^CODE:\s*$/gm, '')
     .trim();
@@ -736,21 +1270,80 @@ function formatVoiceLine(line: string): string {
   return parts[0] + '\n' + parts.slice(1).map(p => '  ' + p).join('\n');
 }
 
+function extractCps(code: string): string | null {
+  const m = code.match(/setcps\(([^)]+)\)/);
+  return m ? m[1] : null;
+}
+
+function cpsRange(skill: Skill): { min: string; max: string; default: string } {
+  const lo = skill.tempo.min ?? 60;
+  const hi = skill.tempo.max ?? 140;
+  const def = skill.tempo.default ?? lo;
+  return {
+    min: (lo / 60 / 4).toFixed(3),
+    max: (hi / 60 / 4).toFixed(3),
+    default: (def / 60 / 4).toFixed(3),
+  };
+}
+
+/**
+ * Fix LLM output that puts BPM instead of cps.
+ * Only corrects if the value is clearly wrong (> 1.0 means BPM, valid cps is ~0.2-0.6).
+ * If valid, leaves it alone so the LLM can vary tempo naturally.
+ */
+function fixCps(code: string, skill: Skill): string {
+  const m = code.match(/setcps\(([^)]+)\)/);
+  if (!m) return code;
+  const val = parseFloat(m[1]);
+  if (isNaN(val)) return code;
+  // If > 1, it's almost certainly BPM — convert it
+  if (val > 1) {
+    const asCps = (val / 60 / 4).toFixed(3);
+    const range = cpsRange(skill);
+    // Clamp to the skill's range
+    const clamped = Math.max(parseFloat(range.min), Math.min(parseFloat(range.max), parseFloat(asCps))).toFixed(3);
+    return code.replace(/setcps\([^)]+\)/, `setcps(${clamped})`);
+  }
+  return code;
+}
+
 function parseReasonCode(raw: string): { reason: string; code: string } {
   let reason = '';
   let code = raw;
 
-  if (raw.includes('REASON:') && raw.includes('CODE:')) {
-    reason = raw.substring(raw.indexOf('REASON:') + 7, raw.indexOf('CODE:')).trim();
-    code = raw.substring(raw.indexOf('CODE:') + 5).trim();
-  } else if (raw.includes('REASON:')) {
-    // REASON without CODE: marker — extract reason, rest is code
-    const reasonMatch = raw.match(/REASON:\s*(.+)/);
+  // Case-insensitive search for REASON:/CODE: markers
+  const reasonIdx = raw.search(/REASON:\s*/i);
+  const codeIdx = raw.search(/CODE:\s*/i);
+
+  if (reasonIdx !== -1 && codeIdx !== -1 && reasonIdx < codeIdx) {
+    const reasonStart = raw.indexOf(':', reasonIdx) + 1;
+    reason = raw.substring(reasonStart, codeIdx).trim();
+    const codeStart = raw.indexOf(':', codeIdx) + 1;
+    code = raw.substring(codeStart).trim();
+  } else if (reasonIdx !== -1) {
+    const reasonStart = raw.indexOf(':', reasonIdx) + 1;
+    const reasonMatch = raw.substring(reasonStart).match(/^(.+?)(?:\n|$)/);
     if (reasonMatch) {
       reason = reasonMatch[1].trim();
-      code = raw.substring(raw.indexOf('\n', raw.indexOf('REASON:')) + 1).trim();
+      code = raw.substring(reasonStart + reasonMatch[0].length).trim();
+    }
+  } else {
+    // No markers at all — find the first line that looks like code
+    const firstCodeLine = raw.search(/^\s*(\$\w+:|setcps\(|register\()/m);
+    if (firstCodeLine > 0) {
+      reason = raw.substring(0, firstCodeLine).trim();
+      code = raw.substring(firstCodeLine).trim();
     }
   }
+
+  // Truncate reason to one sentence for display
+  if (reason.length > 200) {
+    const sentenceEnd = reason.indexOf('.', 60);
+    reason = sentenceEnd > 0 ? reason.substring(0, sentenceEnd + 1) : reason.substring(0, 200) + '...';
+  }
+
+  // Clean junk from reason (slashes, empty markers)
+  reason = reason.replace(/^[\/\s]+$/, '').trim();
 
   return { reason, code: cleanCode(code) };
 }

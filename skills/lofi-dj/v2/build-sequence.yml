@@ -1,0 +1,42 @@
+# Build Sequence — Lo-fi DJ v2 (Café Piano)
+#
+# The build order is critical: piano FIRST, always.
+# A café lo-fi track should sound good with just the piano.
+# Everything else layers in gently underneath.
+
+steps:
+  - stage: foundation
+    description: "Warm piano chord progression — the entire emotional center. This alone should sound like a complete piece. Uses real piano samples, NOT synths."
+    code: |
+      $chord: chord("<Cm7 Fm7 Dm7 Gm7>").voicing().sound("piano").slow(4).room(0.6).delay(0.2).delaytime(0.4).gain(0.4)
+
+  - stage: texture
+    description: "Hi-hats shimmer in — like rain on a café window. Sparse, gentle, barely there."
+    code: |
+      $hat: s("hh*4").gain(rand.range(0.08,0.15)).degradeBy(0.3).lpf(2500).pan(sine.range(0.3,0.7).slow(4)).room(0.3)
+
+  - stage: groove
+    description: "Soft kick pulse — felt not heard. Anchors the piano without competing."
+    code: |
+      $kick: sound("bd:1").beat("0,8",16).bank("RolandTR808").gain(0.35).lpf(1500)
+
+  - stage: bass
+    description: "Simple bass follows chord roots — triangle wave, heavily filtered, just warmth underneath."
+    code: |
+      $bass: note("<C2 F2 F2 G2>").sound("triangle").slow(4).lpf(350).gain(0.3)
+
+  - stage: snare
+    description: "Ghost snare — barely audible, adds pocket feel without being a beat."
+    code: |
+      $snare: sound("sd:2").beat("4,12",16).bank("RolandTR808").gain(0.18).room(0.4).degradeBy(0.35)
+
+  - stage: melody
+    description: "Simple piano melody — a few notes floating above the chords. Uses piano samples, NOT synths."
+    code: |
+      $melody: note("<C4 ~ Eb4 ~ G4 ~ F4 ~>").sound("piano").gain(0.18).room(0.5).delay(0.15)
+
+  - stage: refine
+    description: "Add breathing — slow filter LFO on chord voice, slight delay depth changes."
+
+  - stage: variation
+    description: "Shift voicing — try Cmaj7 Dm7 Gm7 Am7 or add chord extensions (9ths). Never lose the piano focus."

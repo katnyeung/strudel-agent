@@ -26,10 +26,31 @@
   .stop-btn { background: var(--surface2); color: var(--dim); border: 1px solid var(--border); padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 12px; font-family: inherit; }
 
   /* ── Strudel Editor ── */
-  .editor-wrap { flex: 1; position: relative; overflow: hidden; background: var(--bg); }
+  .editor-wrap { flex: 1; position: relative; overflow: hidden; background: var(--bg); min-height: 0; }
   .editor-wrap strudel-editor {
     display: block; position: absolute; top: 0; left: 0; right: 0; bottom: 0;
   }
+  /* ── Tetris Panel ── */
+  .tetris-wrap {
+    height: 340px; min-height: 200px; border-top: 1px solid var(--border);
+    background: var(--surface); display: flex; flex-direction: column; align-items: center;
+    padding: 8px 8px 4px;
+  }
+  .tetris-wrap canvas { display: block; }
+  .tetris-controls {
+    display: flex; align-items: center; gap: 8px; margin-top: 6px; font-size: 11px; color: var(--dim);
+  }
+  .tetris-controls label { white-space: nowrap; }
+  .tetris-controls input[type="range"] {
+    width: 80px; -webkit-appearance: none; appearance: none; height: 3px;
+    background: var(--border); border-radius: 2px; outline: none;
+  }
+  .tetris-controls input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none; width: 12px; height: 12px; border-radius: 50%;
+    background: var(--accent); cursor: pointer;
+  }
+  .tetris-controls input[type="checkbox"] { accent-color: var(--accent); }
+
   /* Force CodeMirror inside strudel-editor to fill (light DOM case) */
   strudel-editor .cm-editor { height: 100% !important; }
   strudel-editor .cm-scroller { overflow: auto !important; }
@@ -155,6 +176,21 @@
 -->
       </strudel-editor>
     </div>
+    <div class="tetris-wrap" id="tetrisWrap">
+      <canvas id="tetrisCanvas"></canvas>
+      <div class="tetris-controls">
+        <label>Speed:</label>
+        <input type="range" id="tetrisSpeed" min="200" max="10000" value="600" step="100"
+               oninput="onTetrisSpeed(this.value)">
+        <span id="tetrisSpeedVal">600ms</span>
+        <label>Combo:</label>
+        <input type="range" id="comboThreshold" min="1" max="5" value="3" step="1"
+               oninput="onComboThreshold(this.value)">
+        <span id="comboThresholdVal">3</span>
+        <label><input type="checkbox" id="tetrisAutoReset" checked onchange="onTetrisAutoReset(this.checked)"> Auto-reset</label>
+        <label><input type="checkbox" id="tetrisRandomSpeed" onchange="onRandomSpeedToggle(this.checked)"> Randomize</label>
+      </div>
+    </div>
   </div>
 
   <!-- RIGHT: Copilot -->
@@ -169,10 +205,10 @@
     </div>
 
     <div class="evolve-controls">
-      <label>Evolve:</label>
-      <input type="range" id="evolveSlider" min="10" max="120" value="60" oninput="onEvolveSlider(this.value)">
-      <span class="evolve-val" id="evolveVal">60s</span>
-      <button class="evolve-now-btn" onclick="evolveNow()">⚡ Now</button>
+      <label><input type="checkbox" id="evolveToggle" onchange="onEvolveToggle(this.checked)"> Evolve:</label>
+      <input type="range" id="evolveSlider" min="10" max="120" value="60" oninput="onEvolveSlider(this.value)" disabled>
+      <span class="evolve-val" id="evolveVal">off</span>
+      <button class="evolve-now-btn" onclick="evolveNow()" id="evolveNowBtn" disabled>⚡ Now</button>
     </div>
 
     <div class="rating-bar">
@@ -201,8 +237,23 @@
   </div>
 </div>
 
+<!-- Tetris game engine -->
+<script src="tetris.js"></script>
+
 <!-- Strudel REPL web component — includes CodeMirror editor, pianoroll, mini-notation highlighting -->
-<script src="https://unpkg.com/@strudel/repl@latest"></script>
+<script src="https://unpkg.com/@strudel/repl@1.2.9"></script>
+<script>
+// Load dirt-samples (includes piano, gm_epiano1, gm_epiano2, etc.)
+function loadDirtSamples() {
+  if (typeof samples === 'function') {
+    samples('github:tidalcycles/dirt-samples');
+    console.log('[samples] dirt-samples loaded (piano, epiano, etc.)');
+  } else {
+    setTimeout(loadDirtSamples, 500);
+  }
+}
+setTimeout(loadDirtSamples, 1000);
+</script>
 <script>
 const strudelEl = document.getElementById('strudelEditor');
 let isPlaying = false;
@@ -249,12 +300,25 @@ function getCurrentCode() {
 }
 
 // Set code + evaluate (play)
+let _evalDebounce = null;
 window.strudelPlay = async function(code) {
   const ed = await waitForEditor();
   try {
     ed.setCode(code);
-    ed.evaluate();
-    isPlaying = true;
+    if (!isPlaying) {
+      // First play: hush stale state, evaluate immediately
+      try { hush(); } catch(e) {}
+      ed.evaluate();
+      isPlaying = true;
+    } else {
+      // Subsequent updates: debounce to reduce scheduler hiccups.
+      // Short delay lets the current cycle's events finish scheduling.
+      if (_evalDebounce) clearTimeout(_evalDebounce);
+      _evalDebounce = setTimeout(() => {
+        try { ed.evaluate(); } catch(e) { console.warn('[strudel] re-eval error:', e); }
+        _evalDebounce = null;
+      }, 100);
+    }
     console.log('[strudel] playing');
   } catch (e) {
     console.error('[strudel] eval error:', e);
@@ -366,6 +430,31 @@ function handleMessage(msg) {
     case 'error':
       addLog(msg.message || 'Something went wrong', 'error');
       break;
+
+    case 'tetris_next_piece':
+      if (tetris && msg.pieceKey) tetris.setNextPiece(msg.pieceKey);
+      break;
+
+    case 'tetris_spawn_piece':
+      if (tetris && msg.pieceKey) tetris.spawnPiece(msg.pieceKey);
+      break;
+
+    case 'tetris_remove_voice':
+      if (tetris && msg.voiceName) tetris.removeVoice(msg.voiceName);
+      break;
+
+    case 'tetris_set_speed':
+      if (tetris && msg.speedMs) {
+        tetris.setSpeed(msg.speedMs);
+        document.getElementById('tetrisSpeed').value = msg.speedMs;
+        document.getElementById('tetrisSpeedVal').textContent = msg.speedMs + 'ms';
+      }
+      break;
+
+    case 'vocal_ready':
+      if (msg.sampleUrl) registerVocalSample(msg.sampleUrl, msg.sampleName || 'vocal');
+      addLog(`Vocal: "${msg.word}" loaded as ${msg.sampleName || 'vocal'}`, 'info');
+      break;
   }
 }
 
@@ -391,6 +480,7 @@ function selectSkill(id, btn) {
   document.querySelectorAll('.skill-btn').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
   ws.send(JSON.stringify({ type: 'select_skill', skillId: id }));
+  initTetris();
 }
 
 function sendCommand() {
@@ -410,6 +500,17 @@ function sendCommand() {
 function rate(r) {
   if (ws && ws.readyState === 1) {
     ws.send(JSON.stringify({ type: 'rate', rating: r }));
+  }
+}
+
+function onEvolveToggle(enabled) {
+  document.getElementById('evolveSlider').disabled = !enabled;
+  document.getElementById('evolveNowBtn').disabled = !enabled;
+  document.getElementById('evolveVal').textContent = enabled
+    ? document.getElementById('evolveSlider').value + 's'
+    : 'off';
+  if (ws && ws.readyState === 1) {
+    ws.send(JSON.stringify({ type: 'toggle_evolve', enabled }));
   }
 }
 
@@ -523,6 +624,83 @@ function addLog(message, type, phase, candidateNum, candidateTotal) {
 
   // Keep log manageable
   while (log.children.length > 100) log.removeChild(log.firstChild);
+}
+
+// ══════════════════════════════════════════════════
+// Vocal Sample Registration
+// ══════════════════════════════════════════════════
+
+function registerVocalSample(sampleUrl, sampleName) {
+  sampleName = sampleName || 'vocal';
+  // Build absolute URL from relative path
+  const absUrl = new URL(sampleUrl, location.origin).href;
+  // Register via Strudel's global samples() — makes s("vocal0") etc. work in patterns
+  try {
+    if (typeof samples === 'function') {
+      samples({ [sampleName]: absUrl });
+      console.log(`[vocal] Registered ${sampleName}:`, absUrl);
+    } else {
+      console.warn('[vocal] samples() not available yet');
+    }
+  } catch (e) {
+    console.error('[vocal] Failed to register sample:', e);
+  }
+}
+
+// ══════════════════════════════════════════════════
+// Tetris Integration
+// ══════════════════════════════════════════════════
+
+let tetris = null;
+
+function initTetris() {
+  if (tetris) { tetris.destroy(); tetris = null; }
+  const canvas = document.getElementById('tetrisCanvas');
+  tetris = new MusicTetris(canvas, {
+    speedMs: parseInt(document.getElementById('tetrisSpeed').value) || 600,
+    autoReset: document.getElementById('tetrisAutoReset').checked,
+    onPieceLand(constraints) {
+      if (ws && ws.readyState === 1) {
+        ws.send(JSON.stringify({ type: 'tetris_state', constraints }));
+      }
+    },
+    onCombo(comboCount) {
+      if (ws && ws.readyState === 1) {
+        ws.send(JSON.stringify({ type: 'tetris_combo', comboCount }));
+      }
+      addLog(`COMBO x${comboCount}! Generating vocal...`, 'info');
+    },
+    onGameOver() {
+      addLog('Tetris: MIX OVERFLOW — board full', 'info');
+    },
+    onConstraintsChange(constraints) {
+      // Called on removeVoice — also sent via onPieceLand
+    },
+  });
+  tetris.start();
+}
+
+function onTetrisSpeed(val) {
+  document.getElementById('tetrisSpeedVal').textContent = val + 'ms';
+  if (tetris) tetris.setSpeed(parseInt(val));
+}
+
+function onRandomSpeedToggle(checked) {
+  const slider = document.getElementById('tetrisSpeed');
+  slider.disabled = checked;
+  slider.style.opacity = checked ? '0.4' : '1';
+  if (ws && ws.readyState === 1) {
+    ws.send(JSON.stringify({ type: 'tetris_random_speed', enabled: checked }));
+  }
+}
+
+function onTetrisAutoReset(checked) {
+  if (tetris) tetris.setAutoReset(checked);
+}
+
+function onComboThreshold(val) {
+  document.getElementById('comboThresholdVal').textContent = val;
+  if (tetris) tetris.setComboThreshold(parseInt(val));
 }
 
 // Auto-connect
