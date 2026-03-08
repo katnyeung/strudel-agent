@@ -71,3 +71,11 @@ dropped beat.
 - No melody-driven content (filter movement is the melody)
 - No degradeBy on kick (keep it locked in)
 - No reverb on kick or bass (clean low end)
+
+## Vocal Treatment
+When a vocal sample is loaded via `samples()`, use `s("vocal")` with these effects:
+- `.slice(16, 0)` — robotic micro-slicing
+- `.hpf(1000).lpf(4000)` — band-passed, mechanical
+- `.delay(0.5)` — rhythmic echo
+- `.gain(0.2)` — present but controlled
+- Think robotic vocal stab, industrial texture

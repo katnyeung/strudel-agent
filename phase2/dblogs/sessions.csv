@@ -1,0 +1,31 @@
+"id","skill_id","skill_name","started_at","ended_at","total_evolves","avg_rating","final_code"
+"07b3d70e-7161-45d1-860b-d33923c90c75","soul-keys","Soul Keys","2026-03-01 00:02:21.988339+00","2026-03-01 00:07:10.29957+00","7",,"setcps(0.35)
+$keys: chord(""<Cm7 Fm7 Bb7 Ebmaj7>"").voicing().sound(""ep"").lpf(1000).room(0.5).gain(0.42)._pianoroll().color(""orchid"")
+$kick: sound(""bd:1"").beat(""0,6,10"", 16).bank(""RolandTR808"").swing(0.2).gain(0.5).lpf(1800).color(""gold"")"
+"0e12f120-dd74-41b5-93a2-0bc8b78b1ace","soul-keys","Soul Keys","2026-03-01 00:21:41.85218+00","2026-03-01 00:27:33.059175+00","9",,"setcps(85/60/4)
+$keys: chord(""<EbM9 AbM9 Fm9 Bb7>"").voicing().sound(""piano"").lpf(sine.range(1000, 2000).slow(8)).room(0.5).gain(rand.range(0.25, 0.35))._pianoroll().delay(0.15).delaytime(0.3).delayfeedback(0.4).color(""purple"")
+$bass: note(""Eb2 ~ G2 F2 ~ Ab2 Bb2 ~"").sound(""triangle"").lpf(400).gain(0.45).swing(0.25).color(""blue"")
+$kick: sound(""bd:4"").beat(""0,6,10,14"", 16).bank(""RolandTR808"").gain(0.3).swing(0.25).color(""red"")
+$rim: sound(""rim"").beat(""4,12"", 16).bank(""RolandTR808"").gain(0.3).room(0.4).swing(0.25).color(""yellow"")"
+"10ac59a0-7824-423d-a0c5-eb7a0453fa1d","soul-keys","Soul Keys","2026-03-01 00:09:50.472839+00",,"0",,
+"1db1dad2-9e71-44c4-8e8b-9a986333a0df","soul-keys","Soul Keys","2026-03-01 00:15:20.072109+00",,"0",,
+"419b61e6-4351-4012-991f-feca7f48e097","lofi-dj","Lo-fi DJ","2026-02-28 20:18:54.364556+00","2026-02-28 20:19:18.863624+00","0",,"REASON: Setting up a chill Eb minor groove with a classic 808 beat, a slow, filtered sawtooth chord progression, and gentle swing.
+setcps(0.354)
+$kick: s(""bd ~ ~ bd ~ ~ bd ~"").bank(""RolandTR808"").gain(0.6).lpf(2000).swing(0.15).color(""salmon"")
+$snare: s(""~ ~ sd ~ ~ sd ~ ~"").bank(""RolandTR808"").gain(0.45).room(0.3).swing(0.15).color(""gold"")
+$chord: chord(""Ebm7 Abm7 Ebm7 Bbm7"").voicing().slow(4).sound(""sawtooth"").attack(0.5).release(1.5).lpf(sine.range(500,1200).slow(8)).gain(0.3).room(0.6).color(""magenta"")._pianoroll()"
+"7026a26e-1e34-486e-bbb2-c4c4a0878a00","minimal-techno","Minimal Techno","2026-02-28 23:51:34.936588+00",,"0",,
+"9a2d550e-071b-4af1-b46e-e86b4d738721",,,"2026-03-01 00:02:21.246305+00","2026-03-01 00:02:21.26586+00","0",,
+"9b08dbce-b944-4651-a890-df8ae8da948f",,,"2026-03-01 00:15:07.68876+00","2026-03-01 00:15:16.596568+00","0",,
+"ae3d332f-eaf1-44e5-a1df-61e387d931c1",,,"2026-03-01 00:21:37.395651+00","2026-03-01 00:21:38.48945+00","0",,
+"b0fc4eb2-e119-456e-97b4-85a0f5a63f0b",,,"2026-03-01 00:09:33.854276+00","2026-03-01 00:09:47.052647+00","0",,
+"bbcf328a-d238-46e2-8d06-46f30c37e13b",,,"2026-03-01 00:07:12.821178+00",,"0",,
+"ce3d2117-198d-4322-886d-fb3b081b8892",,,"2026-03-01 00:13:18.420604+00","2026-03-01 00:13:18.462331+00","0",,
+"d0973e08-99ca-4023-84bf-3922c93e0645","soul-keys","Soul Keys","2026-03-01 00:13:20.902274+00","2026-03-01 00:14:55.644461+00","1",,"setcps(75/60/4)
+$keys: chord(""<Fm7 Dbmaj7 Abmaj7 Eb7>"").voicing().sound(""sawtooth"").lpf(sine.range(800, 1200).slow(8)).room(0.6).gain(0.35)._pianoroll().color(""gold"")
+$bass: note(""F2 ~ Ab2 ~ Db2 ~ Eb2 ~"").sound(""triangle"").lpf(400).gain(0.45).swing(0.25).color(""darkgreen"")
+$kick: sound(""bd:1"").beat(""0,6,10,14"", 16).bank(""RolandTR808"").swing(0.25).gain(0.5).lpf(1800).color(""firebrick"")"
+"e30f910a-f4ea-482e-aa9d-a028d60cae45","minimal-techno","Minimal Techno","2026-02-28 20:19:36.895965+00","2026-02-28 20:54:30.277828+00","49",,"setcps(0.5125)
+$kick: s(""bd:3 ~ ~ ~ bd:3 ~ bd:1 ~ bd:3 ~ ~ ~ bd:3 ~"").bank(""RolandTR909"").gain(0.7).lpf(sine.range(2000, 4000).slow(4)).pan(sine.range(0.2, 0.8).slow(6)).color(""orange"")._scope()
+$bass: note(""D8 E4 D2 D4 ~ D2 D2 ~"").sound(""square"").lpf(sine.range(200,800).slow(8)).gain(0.5).sometimesBy(0.4, x => x.fast(2)).color(""cyan"")._pianoroll()
+$hat: s(""hh*8"").bank(""RolandTR909"").gain(0.25).hpf(5000).lpf(sine.range(6000, 8000).slow(6)).color(""lime"")._spiral()"

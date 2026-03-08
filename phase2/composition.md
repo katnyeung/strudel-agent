@@ -40,7 +40,7 @@ $bass: note("C2 ~ C2 ~ Eb2 ~ F2 ~").sound("triangle").slow(2).gain(0.4)
 
 ```
 // ✅ CORRECT — one chord per bar, perfectly aligned
-$chord: chord("<Cm7 Fm7 G#maj7 G7>").voicing().sound("sawtooth").lpf(1200).gain(0.3)
+$chord: chord("<Cm7 Fm7 Abmaj7 G7>").voicing().sound("sawtooth").lpf(1200).gain(0.3)
 
 // ❌ WRONG — 3 chords + .slow(4) = chords drift against 4/4 drums
 $chord: chord("<Cm7 Fm7 G7>").voicing().sound("sawtooth").slow(4).gain(0.3)

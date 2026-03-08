@@ -1,5 +1,6 @@
 import type { LlmGateway } from './llm.js';
-import type { Skill, BuildStep, Session, HumanInput, WsOutgoing, ChatMessage } from './types.js';
+import type { Skill, BuildStep, Session, HumanInput, WsOutgoing, ChatMessage, TetrisConstraints, VocalState } from './types.js';
+import { generateVocal, cleanupVocal } from './vocal.js';
 import { allSkills, getSkill, getBaseKnowledge } from './skills.js';
 import { MusicTheory } from './music-theory.js';
 import * as neon from './db/neon.js';
@@ -41,9 +42,15 @@ export function startSession(id: string, send: (msg: WsOutgoing) => void): void 
     lastEvolveTime: null,
     evolveTimer: null,
     evolveInterval: EVOLVE_INTERVAL,
+    evolveEnabled: false,
     voiceRatings: new Map(),
     humanQueue: [],
     history: [],
+    tetrisActive: true,
+    tetrisConstraints: null,
+    pendingConstraints: null,
+    llmInFlight: false,
+    vocalState: null,
   };
   sessions.set(id, session);
 
@@ -68,6 +75,7 @@ export function stopSession(id: string): void {
     }).catch(e => console.error('[neon]', e.message));
   }
   if (s?.evolveTimer) clearTimeout(s.evolveTimer);
+  if (s?.vocalState) cleanupVocal(s.vocalState.sampleUrl);
   sessions.delete(id);
 }
 
@@ -167,6 +175,320 @@ export function onEvolveNow(id: string, llm: LlmGateway): void {
   evolutionTick(s, llm);
 }
 
+export function onToggleEvolve(id: string, enabled: boolean, llm: LlmGateway): void {
+  const s = sessions.get(id);
+  if (!s) return;
+  s.evolveEnabled = enabled;
+  if (enabled) {
+    // Start evolution loop if we have a skill and are in evolving phase
+    if (s.skill && s.phase === 'evolving' && !s.tetrisActive) {
+      scheduleEvolution(s, llm);
+    }
+    console.log(`[agent] Evolution enabled for ${id}`);
+  } else {
+    if (s.evolveTimer) { clearTimeout(s.evolveTimer); s.evolveTimer = null; }
+    console.log(`[agent] Evolution disabled for ${id}`);
+  }
+}
+
+// ═══════════════════════════════════════════════════
+// Tetris integration
+// ═══════════════════════════════════════════════════
+
+/** Piece key → voice name mapping */
+const PIECE_TO_VOICE: Record<string, string> = {
+  kick: 'kick', hat: 'hat', snare: 'snare',
+  bass: 'bass', chord: 'chord', melody: 'melody', pad: 'pad',
+};
+const VOICE_TO_PIECE: Record<string, string> = {};
+for (const [k, v] of Object.entries(PIECE_TO_VOICE)) VOICE_TO_PIECE[v] = k;
+const ALL_PIECE_KEYS = Object.keys(PIECE_TO_VOICE);
+
+export function onTetrisState(id: string, constraints: TetrisConstraints, llm: LlmGateway): void {
+  const s = sessions.get(id);
+  if (!s) return;
+
+  // Mark Tetris active on first state message
+  if (!s.tetrisActive) {
+    s.tetrisActive = true;
+    // Stop evolution loop — pieces drive regeneration
+    if (s.evolveTimer) { clearTimeout(s.evolveTimer); s.evolveTimer = null; }
+    console.log('[agent] Tetris mode activated');
+  }
+
+  s.tetrisConstraints = constraints;
+
+  // Skip regeneration if board is empty (e.g. after restart, before first piece)
+  if (!constraints.activeVoices || constraints.activeVoices.length === 0) {
+    return;
+  }
+
+  // Debounce: if LLM call in flight, store as pending
+  if (s.llmInFlight) {
+    s.pendingConstraints = constraints;
+    return;
+  }
+
+  regenerateFromConstraints(s, llm);
+
+  // Predict next piece for the browser
+  predictNextPiece(s);
+}
+
+export function onTetrisRestart(id: string, llm: LlmGateway): void {
+  const s = sessions.get(id);
+  if (!s) return;
+  s.tetrisConstraints = null;
+  s.pendingConstraints = null;
+  s.send({ type: 'agent_log', message: 'Tetris reset — waiting for first piece...' });
+}
+
+export async function onCombo(id: string, comboCount: number, llm: LlmGateway): Promise<void> {
+  const s = sessions.get(id);
+  if (!s || !s.skill) return;
+
+  // Replace existing vocal if one is active
+  if (s.vocalState) {
+    console.log('[agent] Replacing existing vocal with new combo');
+    cleanupVocal(s.vocalState.sampleUrl);
+    s.vocalState = null;
+  }
+
+  console.log(`[agent] Combo x${comboCount} — generating vocal`);
+  s.send({ type: 'agent_log', message: `Combo x${comboCount}! Picking a vocal word...` });
+
+  try {
+    // LLM picks a word fitting the genre/mood
+    const wordPrompt = `Pick ONE single word that fits the mood of ${s.skill.name} music. The word will be spoken as a vocal sample mixed into the track. Reply with ONLY the word, nothing else.`;
+    const word = (await llm.chat(
+      `You are a music producer picking vocal ad-libs. Reply with exactly one word.`,
+      [{ role: 'user', content: wordPrompt }],
+      20,
+    )).trim().replace(/[^a-zA-Z]/g, '') || 'yeah';
+
+    const { url } = await generateVocal(word);
+    s.vocalState = {
+      word,
+      sampleUrl: url,
+      comboSize: comboCount,
+      ticksAlive: 0,
+      maxTicks: comboCount >= 10 ? 8 : 5,
+      injected: false,
+    };
+    s.send({ type: 'vocal_ready', sampleUrl: url, word, message: `Vocal "${word}" ready — will be woven into next evolution` });
+    console.log(`[agent] Vocal "${word}" ready at ${url}, maxTicks=${s.vocalState.maxTicks}`);
+  } catch (e: any) {
+    console.error('[agent] Vocal generation failed:', e.message);
+    s.send({ type: 'agent_log', message: `Vocal generation failed: ${e.message}` });
+  }
+}
+
+async function regenerateFromConstraints(s: Session, llm: LlmGateway): Promise<void> {
+  if (!s.skill || !s.tetrisConstraints) return;
+  const constraints = s.tetrisConstraints;
+
+  s.llmInFlight = true;
+  s.send({ type: 'thinking', phase: 'evolving', message: `Regenerating with constraints: ${constraints.activeVoices.join(', ')} (${constraints.totalCells} cells)` });
+  console.log(`[agent] Regenerating with constraints:`, constraints.voices);
+
+  const constraintBlock = buildConstraintBlock(constraints, !!s.vocalState);
+  const theoryCtx = buildTheoryContext(s.skill, constraints.activeVoices.join(' '));
+  const vocalCtx = buildVocalContext(s);
+
+  const ratingCtx = s.lastRating !== null
+    ? `\nListener feedback: rated ${s.lastRating}/5${s.lastRating <= 2 ? ' — they don\'t like the current direction, make a significant change' : s.lastRating >= 4 ? ' — they like this direction, keep the vibe' : ''}\n`
+    : '';
+
+  let voiceCtx = '';
+  if (s.voiceRatings.size > 0) {
+    const lines: string[] = [];
+    for (const [name, vr] of s.voiceRatings) {
+      if (vr <= 2) lines.push(`$${name}: disliked — change its sound, rhythm, or pattern`);
+      else if (vr >= 4) lines.push(`$${name}: liked — keep it as-is`);
+      else lines.push(`$${name}: neutral`);
+    }
+    voiceCtx = `\nPer-voice feedback:\n${lines.join('\n')}\n`;
+  }
+
+  const prompt = `Current code:
+${s.currentCode || '(nothing playing)'}
+
+${constraintBlock}
+${theoryCtx}${ratingCtx}${voiceCtx}
+Generate Strudel code that ONLY uses the voices listed in the TETRIS CONSTRAINTS.
+Each voice's note count must not exceed its cell count.
+Keep the musical style of ${s.skill.name}. Be creative within the constraints.
+Add .color("colorname") to every voice for visual distinction. Add ._pianoroll() to one melodic voice (chord, melody, bass, or pad).
+${vocalCtx}
+Reply in this format:
+REASON: (one sentence)
+CODE:
+(complete Strudel code — setcps line + all $: voices${s.vocalState ? ', including $vocal: as last voice' : ''})`;
+
+  try {
+    const messages: ChatMessage[] = [...getHistory(s), { role: 'user', content: prompt }];
+    const result = await llm.chat(buildSystemPrompt(s.skill!, true), messages);
+    const { reason, code } = parseReasonCode(result);
+
+    if (code && /\$\w+:/.test(code)) {
+      const codeBefore = s.currentCode;
+      s.currentCode = code;
+      addHistory(s, 'user', prompt);
+      addHistory(s, 'assistant', `REASON: ${reason}\nCODE:\n${code}`);
+      const voices = parseSimpleVoices(code);
+      cleanStaleVoiceRatings(s, voices);
+      neon.logEvolution({ session_id: s.id, phase: 'tetris', code_before: codeBefore, code_after: code, voices, voice_count: voices.length, reason }).catch(e => console.error('[neon]', e.message));
+      updateVocalState(s, code);
+      s.send({
+        type: 'code_update', code, phase: 'evolving',
+        message: `🎮 ${reason || 'Regenerated from Tetris constraints'}`,
+      });
+    }
+  } catch (e: any) {
+    console.error('[agent] tetris regeneration failed:', e.message);
+    s.send({ type: 'error', message: `Regeneration failed: ${e.message}` });
+  }
+
+  s.llmInFlight = false;
+
+  // Process pending constraints if any
+  if (s.pendingConstraints) {
+    const pending = s.pendingConstraints;
+    s.pendingConstraints = null;
+    s.tetrisConstraints = pending;
+    if (pending.activeVoices.length > 0) {
+      regenerateFromConstraints(s, llm);
+    }
+  }
+}
+
+function buildVocalContext(s: Session): string {
+  const v = s.vocalState;
+  if (!v) return '';
+
+  if (!v.injected) {
+    return `\n## MANDATORY — VOCAL INJECTION
+A vocal sample named "vocal" is pre-loaded in the browser. You MUST add this voice to the output:
+$vocal: s("vocal").chop(8).lpf(1200).room(0.5).gain(0.2)
+Add it as the LAST voice line. The $vocal: voice is NOT a Tetris voice — it is a bonus combo vocal.
+You may adjust the effects based on the "Vocal Treatment" section in the genre rules.
+Do NOT add a samples() line — the sample is already registered.\n`;
+  }
+
+  if (v.ticksAlive < v.maxTicks) {
+    const remaining = v.maxTicks - v.ticksAlive;
+    return `\n## MANDATORY — KEEP VOCAL (${remaining} ticks remaining)
+Your output MUST keep the $vocal: voice. You may change its effects. Do NOT remove it yet.
+Do NOT add a samples() line.\n`;
+  }
+
+  return `\n## MANDATORY — REMOVE VOCAL
+Remove the $vocal: voice from output. The vocal has expired.
+Do NOT add a samples() line.\n`;
+}
+
+function updateVocalState(s: Session, code: string): void {
+  const v = s.vocalState;
+  if (!v) return;
+
+  if (!v.injected && code.includes('$vocal:')) {
+    v.injected = true;
+    // Don't count the injection tick — decay starts next regeneration
+    return;
+  }
+
+  if (v.injected) {
+    v.ticksAlive++;
+    if (v.ticksAlive >= v.maxTicks) {
+      cleanupVocal(v.sampleUrl);
+      s.vocalState = null;
+      console.log('[agent] Vocal decayed and cleaned up');
+    }
+  }
+}
+
+function buildConstraintBlock(constraints: TetrisConstraints, hasVocal = false): string {
+  const lines = constraints.activeVoices.map(v => {
+    const count = constraints.voices[v] || 0;
+    return `- $${v}: up to ${count} notes (${count} cells on board)`;
+  });
+  const vocalNote = hasVocal
+    ? '\nException: $vocal: is EXEMPT from these constraints — it comes from a combo vocal sample, not a Tetris piece. Always include it when the VOCAL INJECTION or VOCAL PRESENT section says so.'
+    : '';
+  return `## TETRIS CONSTRAINTS (STRICT)
+Allowed voices:
+${lines.join('\n')}
+Do NOT use any voice type not listed here. Do NOT exceed the note count.
+IMPORTANT: Melody, bass, arp, and pad voices MUST use a power-of-2 event count (1, 2, 4, or 8 notes+rests) for grid alignment — use fewer notes than the cell limit if needed, fill with ~ rests. Drum voices use .beat() with 16-step grid.${vocalNote}
+Total cells on board: ${constraints.totalCells}`;
+}
+
+async function predictNextPiece(s: Session): Promise<void> {
+  // 70% Neo4j suggestion, 30% random
+  if (Math.random() < 0.3) {
+    const key = ALL_PIECE_KEYS[Math.floor(Math.random() * ALL_PIECE_KEYS.length)];
+    s.send({ type: 'tetris_next_piece', pieceKey: key });
+    return;
+  }
+
+  try {
+    const currentVoices = s.tetrisConstraints?.activeVoices || [];
+    const suggestions = await getSuggestedVoicesToAdd(s.skill!.id, currentVoices, 1, 5);
+    if (suggestions.length > 0) {
+      // Pick weighted by rating
+      const pick = suggestions[Math.floor(Math.random() * Math.min(3, suggestions.length))];
+      const pieceKey = VOICE_TO_PIECE[pick.voice_name];
+      if (pieceKey) {
+        s.send({ type: 'tetris_next_piece', pieceKey });
+        console.log(`[agent] Neo4j suggests next piece: ${pieceKey} (${pick.voice_name})`);
+        return;
+      }
+    }
+  } catch (e: any) {
+    console.error('[agent] Neo4j prediction failed:', e.message);
+  }
+
+  // Fallback: random
+  const key = ALL_PIECE_KEYS[Math.floor(Math.random() * ALL_PIECE_KEYS.length)];
+  s.send({ type: 'tetris_next_piece', pieceKey: key });
+}
+
+// ═══════════════════════════════════════════════════
+// Board command classification (for human commands when Tetris active)
+// ═══════════════════════════════════════════════════
+
+const BOARD_ADD_RE = /\b(?:add|more|spawn|drop|give me|want)\s+(?:a\s+)?(\w+)/i;
+const BOARD_REMOVE_RE = /\b(?:remove|delete|clear|kill|drop|no more)\s+(?:the\s+)?(?:all\s+)?(\w+)/i;
+const VOICE_NAMES = new Set(['kick', 'hat', 'snare', 'bass', 'chord', 'melody', 'pad', 'bd', 'hh']);
+
+interface BoardCommand {
+  action: 'add' | 'remove' | 'music';
+  voice?: string;
+}
+
+function classifyBoardCommand(command: string): BoardCommand {
+  // Try "remove" first (more specific)
+  const removeMatch = command.match(BOARD_REMOVE_RE);
+  if (removeMatch) {
+    const word = removeMatch[1].toLowerCase();
+    if (VOICE_NAMES.has(word)) return { action: 'remove', voice: word };
+    // Alias: bd→kick, hh→hat
+    if (word === 'bd') return { action: 'remove', voice: 'kick' };
+    if (word === 'hh') return { action: 'remove', voice: 'hat' };
+  }
+
+  // Try "add"
+  const addMatch = command.match(BOARD_ADD_RE);
+  if (addMatch) {
+    const word = addMatch[1].toLowerCase();
+    if (VOICE_NAMES.has(word)) return { action: 'add', voice: word };
+    if (word === 'bd') return { action: 'add', voice: 'kick' };
+    if (word === 'hh') return { action: 'add', voice: 'hat' };
+  }
+
+  return { action: 'music' };
+}
+
 // ═══════════════════════════════════════════════════
 // Phase 1: BOOTSTRAP — start with one simple voice
 // ═══════════════════════════════════════════════════
@@ -178,13 +500,30 @@ async function bootstrap(s: Session, llm: LlmGateway): Promise<void> {
   const bpm = skill.tempo.default ?? skill.tempo.min;
   const cps = (bpm / 60 / 4).toFixed(3);
 
-  // Generate a randomized first beat via LLM
+  // Tetris mode: skip LLM call — just set tempo and wait for pieces
+  if (s.tetrisActive) {
+    const startCode = `setcps(${cps})`;
+    s.currentCode = startCode;
+    s.send({
+      type: 'code_update', code: startCode, phase: 'bootstrap',
+      message: `${skill.icon} ${skill.name} at ${bpm} BPM — Tetris pieces will build the music.`,
+    });
+    s.send({
+      type: 'agent_log', phase: 'evolving',
+      message: "Tetris is driving the music — pieces = instruments. Talk to me anytime.",
+    });
+    s.phase = 'evolving';
+    if (s.humanQueue.length > 0) await respondToHuman(s, llm);
+    return;
+  }
+
+  // Normal mode: generate a first beat via LLM
   s.send({ type: 'thinking', phase: 'bootstrap', message: `Generating a fresh ${skill.name} beat at ${bpm} BPM...` });
 
   const theoryCtx = buildTheoryContext(skill, 'chord melody bass kick');
 
   const prompt = `Generate a fresh starting pattern for ${skill.name} at ${bpm} BPM.
-Pick a random key from: C, D, Eb, F, G, Ab, Bb — don't always use the same one.
+Pick a random key from: C, D, F, G, A — don't always use the same one.
 Start with 2-3 voices (e.g. a rhythm + a harmonic element). Keep it simple but musical.
 Make it sound different each time — vary the rhythms, chord voicings, sound choices, effects.
 Add .color("colorname") to every voice for visual distinction. Add ._pianoroll() to one melodic voice.
@@ -239,7 +578,9 @@ setcps(${cps})
 
   s.send({
     type: 'agent_log', phase: 'evolving',
-    message: "I'll evolve this every ~60s. Talk to me anytime to steer the music.",
+    message: s.evolveEnabled
+      ? "I'll evolve this every ~60s. Talk to me anytime to steer the music."
+      : "Evolution is off. Enable it with the checkbox, or talk to me anytime.",
   });
 
   // Drain any queued commands
@@ -260,6 +601,7 @@ function startEvolutionLoop(s: Session, llm: LlmGateway): void {
 
 function scheduleEvolution(s: Session, llm: LlmGateway): void {
   if (s.evolveTimer) clearTimeout(s.evolveTimer);
+  if (!s.evolveEnabled) return;
   s.evolveTimer = setTimeout(() => evolutionTick(s, llm), s.evolveInterval);
 }
 
@@ -301,11 +643,13 @@ async function evolutionTick(s: Session, llm: LlmGateway): Promise<void> {
     voiceCtx = `\nPer-voice feedback:\n${lines.join('\n')}\n`;
   }
 
+  const vocalCtx = buildVocalContext(s);
+
   const prompt = `Current code:
 ${s.currentCode}
 
 Musician move: ${move}
-${theoryCtx}${ratingCtx}${voiceCtx}
+${theoryCtx}${ratingCtx}${voiceCtx}${vocalCtx}
 Apply this ONE change. You may add a new $: voice, modify an existing voice, or tweak parameters. Keep all other voices intact.
 
 Reply in this format:
@@ -328,6 +672,7 @@ CODE:
       addHistory(s, 'assistant', `REASON: ${reason}\nCODE:\n${code}`);
       const voices = parseSimpleVoices(code);
       cleanStaleVoiceRatings(s, voices);
+      updateVocalState(s, code);
       neon.logEvolution({ session_id: s.id, phase: 'evolving', move_type: move, code_before: codeBefore, code_after: code, voices, voice_count: voices.length, reason }).catch(e => console.error('[neon]', e.message));
       s.send({
         type: 'code_update', code, phase: 'evolving',
@@ -513,15 +858,42 @@ async function respondToHuman(s: Session, llm: LlmGateway): Promise<void> {
 
   s.send({ type: 'thinking', phase: 'responding', message: `Hearing you: "${truncate(input.command, 60)}"` });
 
+  // ── Tetris board command handling ──
+  if (s.tetrisActive) {
+    const cmd = classifyBoardCommand(input.command);
+    if (cmd.action === 'add' && cmd.voice) {
+      const pieceKey = VOICE_TO_PIECE[cmd.voice] || cmd.voice;
+      if (ALL_PIECE_KEYS.includes(pieceKey)) {
+        s.send({ type: 'tetris_spawn_piece', pieceKey });
+        s.send({ type: 'agent_log', phase: 'responding', message: `Spawning ${cmd.voice} piece on the board...` });
+        // Also respond musically within current constraints
+      } else {
+        s.send({ type: 'agent_log', message: `Unknown voice "${cmd.voice}" — treating as music command.` });
+      }
+    } else if (cmd.action === 'remove' && cmd.voice) {
+      s.send({ type: 'tetris_remove_voice', voiceName: cmd.voice });
+      s.send({ type: 'agent_log', phase: 'responding', message: `Removing ${cmd.voice} from the board...` });
+      // Browser will remove cells and send updated tetris_state → triggers regeneration
+      neon.logCommand({ session_id: s.id, command: input.command }).catch(e => console.error('[neon]', e.message));
+      return;
+    }
+    // For 'music' or 'add' (which also gets a music response), fall through with constraints
+  }
+
   const code = input.currentCode ?? s.currentCode;
   const theoryCtx = s.skill ? buildTheoryContext(s.skill, input.command) : '';
+  const constraintCtx = s.tetrisActive && s.tetrisConstraints
+    ? '\n' + buildConstraintBlock(s.tetrisConstraints, !!s.vocalState) + '\n'
+    : '';
 
   const prompt = `Human says: "${input.command}"
 
 Current code:
 ${code || '(nothing playing)'}
-${theoryCtx}
-Apply their request musically. You may add, modify, or remove $: voices.
+${theoryCtx}${constraintCtx}
+Apply their request musically. You may add, modify, or remove $: voices.${
+  s.tetrisActive ? '\nRespect the TETRIS CONSTRAINTS above — only use allowed voices.' : ''
+}
 
 Reply in this format:
 REASON: (one sentence — what you changed and why)

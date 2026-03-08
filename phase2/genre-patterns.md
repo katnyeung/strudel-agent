@@ -64,16 +64,16 @@ $oh: sound("oh").beat("6,14", 16).bank("RolandTR909").gain(0.2).swing(0.05)
 
 ```
 // Minimal — lazy swing
-$kick: sound("bd:1").beat("0,4,6,10", 16).bank("RolandTR808").gain(rand.range(0.55, 0.65)).swing(0.2)
+$kick: sound("bd:1").beat("0,6,10,14", 16).bank("RolandTR808").gain(0.6).swing(0.2)
 $snare: sound("sd:2").beat("4,12", 16).bank("RolandTR808").gain(0.45).swing(0.2).room(0.3)
 
 // Medium — with dusty hats
-$kick: sound("bd:1").beat("0,4,6,10", 16).bank("RolandTR808").gain(rand.range(0.55, 0.65)).swing(0.2)
+$kick: sound("bd:1").beat("0,6,10,14", 16).bank("RolandTR808").gain(0.6).swing(0.2)
 $snare: sound("sd:2").beat("4,12", 16).bank("RolandTR808").gain(0.45).swing(0.2).room(0.3)
 $hat: sound("hh").beat("0,2,4,6,8,10,12,14", 16).bank("RolandTR808").gain(rand.range(0.1, 0.25)).swing(0.2).degradeBy(0.15).lpf(3500)
 
 // Full — ghost notes and texture
-$kick: sound("bd:1").beat("0,4,6,10", 16).bank("RolandTR808").gain(rand.range(0.55, 0.65)).swing(0.2)
+$kick: sound("bd:1").beat("0,6,10,14", 16).bank("RolandTR808").gain(0.6).swing(0.2)
 $snare: sound("sd:2").beat("4,12", 16).bank("RolandTR808").gain(0.45).swing(0.2).room(0.3)
 $ghost: sound("sd:2").beat("2,7,11,15", 16).bank("RolandTR808").gain(0.12).swing(0.2)
 $hat: sound("hh").beat("0,2,4,6,8,10,12,14", 16).bank("RolandTR808").gain(rand.range(0.1, 0.25)).swing(0.2).degradeBy(0.2).lpf(3500).pan(sine.range(0.3, 0.7).slow(4))
@@ -88,7 +88,7 @@ $kick: sound("bd:1").beat("0,6,10", 16).bank("RolandTR808").gain(0.5).swing(0.25
 $snare: sound("sd:2").beat("4,12", 16).bank("RolandTR808").gain(0.35).swing(0.25).room(0.3)
 
 // Medium — with ghost notes
-$kick: sound("bd:1").beat("0,4,6,10", 16).bank("RolandTR808").gain(0.5).swing(0.25)
+$kick: sound("bd:1").beat("0,6,10,14", 16).bank("RolandTR808").gain(0.5).swing(0.25)
 $snare: sound("sd:2").beat("4,12", 16).bank("RolandTR808").gain(0.35).swing(0.25).room(0.3)
 $ghost: sound("sd:2").beat("7,15", 16).bank("RolandTR808").gain(0.1).swing(0.25)
 $rim: sound("rim").beat("2,6,10,14", 16).bank("RolandTR808").gain(0.12).swing(0.25).degradeBy(0.3)
@@ -167,17 +167,17 @@ $ghost: sound("sd:2").beat("7,15", 16).bank("RolandTR808").gain(0.12).swing(0.1)
 
 ```
 // Minimal — hard hits
-$kick: sound("bd").beat("0,5,10,13", 16).bank("RolandTR808").gain(0.8).swing(0.12)
+$kick: sound("bd").beat("0,5,10,14", 16).bank("RolandTR808").gain(0.8).swing(0.12)
 $snare: sound("sd:3").beat("4,12", 16).bank("RolandTR808").gain(0.7).swing(0.12)
 
 // Medium — with crisp hats
-$kick: sound("bd").beat("0,5,10,13", 16).bank("RolandTR808").gain(0.8).swing(0.12)
+$kick: sound("bd").beat("0,5,10,14", 16).bank("RolandTR808").gain(0.8).swing(0.12)
 $snare: sound("sd:3").beat("4,12", 16).bank("RolandTR808").gain(0.7).swing(0.12)
 $hat: sound("hh").beat("0,2,4,6,8,10,12,14", 16).bank("RolandTR808").gain(0.4).swing(0.12).hpf(4000)
 $oh: sound("oh").beat("6,14", 16).bank("RolandTR808").gain(0.25).swing(0.12)
 
 // Full — with variation
-$kick: sound("bd").beat("<0,5,10,13 0,5,8,10,13>", 16).bank("RolandTR808").gain(0.8).swing(0.12)
+$kick: sound("bd").beat("<0,5,10,14 0,5,8,10,14>", 16).bank("RolandTR808").gain(0.8).swing(0.12)
 $snare: sound("sd:3").beat("4,12", 16).bank("RolandTR808").gain(0.7).swing(0.12)
 $hat: sound("hh").beat("0,2,4,6,8,10,12,14", 16).bank("RolandTR808").gain(0.4).swing(0.12).hpf(4000)
 $oh: sound("oh").beat("6,14", 16).bank("RolandTR808").gain(0.25).swing(0.12)
@@ -279,17 +279,17 @@ This automatically aligns with the drum grid.
 
 ### Lo-fi Hip-hop
 ```
-$chord: chord("<Cm7 Fm7 G#M7 G7>").voicing().sound("sawtooth").lpf(sine.range(500, 1200).slow(8)).gain(0.3).room(0.6)
+$chord: chord("<Cm7 Fm7 Abmaj7 G7>").voicing().sound("sawtooth").lpf(sine.range(500, 1200).slow(8)).gain(0.3).room(0.6)
 ```
 
 ### Soul / Neo-Soul
 ```
-$keys: chord("<D#M7 G#M7 Fm9 A#7>").voicing().sound("sawtooth").lpf(1200).room(0.6).gain(0.35)
+$keys: chord("<Ebmaj7 Abmaj7 Fm9 Bb7>").voicing().sound("sawtooth").lpf(1200).room(0.6).gain(0.35)
 ```
 
 ### Jazz
 ```
-$chord: chord("<Dm7 G7 CM7 Am7>").voicing().sound("sawtooth").lpf(1500).gain(0.25).room(0.4).swing(0.3).degradeBy(0.2)
+$chord: chord("<Dm7 G7 Cmaj7 Am7>").voicing().sound("sawtooth").lpf(1500).gain(0.25).room(0.4).swing(0.3).degradeBy(0.2)
 ```
 
 ### Minimal Techno — stab (not sustained chord)
@@ -350,7 +350,7 @@ Apply to individual voices for movement. Keep ALL drums on the same grid.
 - Hats: 2,6,10,14 (offbeat) or all even numbers (eighth notes)
 
 ### Swung / Laid-back (lo-fi, soul, jazz, boom bap)
-- Kick: 0,4,6,10 (syncopated) or 0,5,10,13
+- Kick: 0,6,10,14 (syncopated) or 0,5,10,14
 - Snare: 4,12 (backbeat stays on grid even with swing)
 - Hats: 0,2,4,6,8,10,12,14 with .degradeBy(0.15)
 - Ghost: 2,7,11,15 at very low gain (0.08-0.12)

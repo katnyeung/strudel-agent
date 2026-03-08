@@ -5,11 +5,7 @@ import path from 'node:path';
 import { WebSocketServer, WebSocket } from 'ws';
 import { createLlm } from './llm.js';
 import { loadSkills, allSkills, getSkill, skillVersions } from './skills.js';
-import { startSession, stopSession, onSelectSkill, onCommand, onCodeEdit, onRate, onSetEvolveInterval, onEvolveNow, onToggleEvolve, onTetrisState, onTetrisRestart, onCombo } from './agent.js';
-import { connectNeon, disconnectNeon } from './db/neon.js';
-import { connectNeo4j, disconnectNeo4j, setupSchema as setupNeo4jSchema, getGraphStats } from './db/neo4j.js';
-import { runAnalysis, getAnalysisStatus } from './db/analysis.js';
-import { runMergeReview, runFullReview, getReviewStatus } from './db/review.js';
+import { startSession, stopSession, onSelectSkill, onCommand, onCodeEdit, onRate, onVibe } from './agent.js';
 import type { WsIncoming, WsOutgoing } from './types.js';
 
 // ─── Config ───────────────────────────────────────
@@ -27,21 +23,6 @@ const llm = createLlm({
 });
 
 loadSkills(SKILLS_PATH);
-await connectNeon();
-await connectNeo4j();
-if ((await import('./db/neo4j.js')).isConnected()) {
-  await setupNeo4jSchema();
-}
-
-// ─── Graceful shutdown ───────────────────────────
-for (const sig of ['SIGTERM', 'SIGINT'] as const) {
-  process.on(sig, async () => {
-    console.log(`\n[server] ${sig} received, shutting down...`);
-    await disconnectNeo4j();
-    await disconnectNeon();
-    process.exit(0);
-  });
-}
 
 // ─── HTTP Server (for REST API + static files) ────
 
@@ -84,55 +65,6 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  // Analysis pipeline endpoints
-  if (url.pathname === '/api/analysis/run' && req.method === 'POST') {
-    runAnalysis().then(result => json(res, result)).catch(e => {
-      res.writeHead(500);
-      res.end(JSON.stringify({ error: e.message }));
-    });
-    return;
-  }
-
-  if (url.pathname === '/api/analysis/status' && req.method === 'GET') {
-    getAnalysisStatus().then(result => json(res, result)).catch(e => {
-      res.writeHead(500);
-      res.end(JSON.stringify({ error: e.message }));
-    });
-    return;
-  }
-
-  // LLM Review endpoints
-  if (url.pathname === '/api/review/merge' && req.method === 'POST') {
-    const skill = url.searchParams.get('skill') ?? undefined;
-    runMergeReview(skill).then(result => json(res, result)).catch(e => {
-      res.writeHead(500);
-      res.end(JSON.stringify({ error: e.message }));
-    });
-    return;
-  }
-
-  if (url.pathname === '/api/review/full' && req.method === 'POST') {
-    const skill = url.searchParams.get('skill') ?? undefined;
-    runFullReview(skill).then(result => json(res, result)).catch(e => {
-      res.writeHead(500);
-      res.end(JSON.stringify({ error: e.message }));
-    });
-    return;
-  }
-
-  if (url.pathname === '/api/review/status' && req.method === 'GET') {
-    json(res, getReviewStatus());
-    return;
-  }
-
-  if (url.pathname === '/api/graph/stats' && req.method === 'GET') {
-    getGraphStats().then(result => json(res, result)).catch(e => {
-      res.writeHead(500);
-      res.end(JSON.stringify({ error: e.message }));
-    });
-    return;
-  }
-
   // Static files from web/
   serveStatic(req, res, url);
 });
@@ -161,6 +93,9 @@ wss.on('connection', (ws: WebSocket) => {
         case 'select_skill':
           if (msg.skillId) onSelectSkill(id, msg.skillId, llm);
           break;
+        case 'vibe':
+          if (msg.vibeText) onVibe(id, msg.vibeText, llm);
+          break;
         case 'command':
           if (msg.command) onCommand(id, msg.command, msg.currentCode, llm);
           break;
@@ -168,25 +103,7 @@ wss.on('connection', (ws: WebSocket) => {
           if (msg.currentCode) onCodeEdit(id, msg.currentCode);
           break;
         case 'rate':
-          onRate(id, msg.rating ?? 3, msg.voiceName);
-          break;
-        case 'set_evolve_interval':
-          if (msg.interval) onSetEvolveInterval(id, msg.interval);
-          break;
-        case 'evolve_now':
-          onEvolveNow(id, llm);
-          break;
-        case 'toggle_evolve':
-          onToggleEvolve(id, msg.enabled ?? false, llm);
-          break;
-        case 'tetris_state':
-          if (msg.constraints) onTetrisState(id, msg.constraints, llm);
-          break;
-        case 'tetris_restart':
-          onTetrisRestart(id, llm);
-          break;
-        case 'tetris_combo':
-          if (msg.comboCount) onCombo(id, msg.comboCount, llm);
+          onRate(id, msg.rating ?? 3);
           break;
         case 'stop':
           stopSession(id);
@@ -219,7 +136,6 @@ function serveStatic(req: http.IncomingMessage, res: http.ServerResponse, url: U
   const mimeTypes: Record<string, string> = {
     '.html': 'text/html', '.js': 'text/javascript',
     '.css': 'text/css', '.json': 'application/json',
-    '.mp3': 'audio/mpeg',
   };
 
   res.setHeader('Content-Type', mimeTypes[ext] ?? 'application/octet-stream');

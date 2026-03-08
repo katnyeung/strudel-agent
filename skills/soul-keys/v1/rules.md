@@ -44,8 +44,8 @@ voice at very low gain (0.1-0.15).
 
 ## Harmonic Rules
 - **Scales**: major7, dorian, mixolydian. Both major and minor are fine.
-- **Keys**: Eb, Ab, Bb, F preferred (horn-friendly keys)
-- **Chords**: 7ths minimum. 9ths, 11ths, 13ths encouraged.
+- **Keys**: F, C, G, D preferred (use keys whose chords have natural-note roots only)
+- **Chords**: 7ths minimum. 9ths, 11ths, 13ths encouraged. Chord roots MUST be natural notes only (C, D, E, F, G, A, B) — never sharps or flats.
   Chord extensions ARE the sound. Voice-lead between chords.
 - **Progressions**: ii-V-I, I-vi-ii-V, iii-vi-ii-V. Classic soul movement.
 
@@ -67,3 +67,11 @@ voice at very low gain (0.1-0.15).
 - No bare triads (always extend the chord)
 - No staccato keys (sustain and let them sing)
 - No kick on step 14 or 15 wrapping to 0 (causes lost-beat feel)
+
+## Vocal Treatment
+When a vocal sample is loaded via `samples()`, use `s("vocal")` with these effects:
+- `.chop(4)` — smooth gospel-style chops
+- `.lpf(1500)` — warm but present
+- `.room(0.6)` — churchy reverb
+- `.gain(0.2)` to `.gain(0.3)` — confident, soulful presence
+- Think gospel ad-lib, smooth R&B vocal stab

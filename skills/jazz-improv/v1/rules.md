@@ -45,8 +45,8 @@ to .beat() patterns.
 
 ## Harmonic Rules
 - **Scales**: dorian, mixolydian, "whole tone", "minor pentatonic"
-- **Keys**: C, F, Bb, Eb (standard jazz keys)
-- **Chords**: 7ths always. Altered dominants. Tritone subs.
+- **Keys**: C, F, G, D (use keys whose chords have natural-note roots only)
+- **Chords**: 7ths always. Altered dominants. Tritone subs. Chord roots MUST be natural notes only (C, D, E, F, G, A, B) — never sharps or flats.
 - **Progressions**: ii-V-I, I-vi-ii-V, iii-vi-ii-V, blues form
 - **Tension**: Intentional. Use "whole tone" for outside playing.
 
@@ -68,3 +68,11 @@ to .beat() patterns.
 - No heavy effects (keep it acoustic)
 - No static patterns (jazz evolves constantly)
 - No block chords on every beat (comp sparse, leave space)
+
+## Vocal Treatment
+When a vocal sample is loaded via `samples()`, use `s("vocal")` with these effects:
+- Keep natural speed — no heavy chopping
+- `.lpf(2000)` — warm but clear
+- `.room(0.3)` — intimate club reverb
+- `.gain(0.15)` to `.gain(0.2)` — subtle, like a scat syllable
+- Think jazz scat, hip vocal interjection

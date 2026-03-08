@@ -1,70 +1,5 @@
 # Music Composition — Fundamentals for Live Coding
 
-## ⚠️ Rhythm Alignment — The #1 Rule
-
-Before anything else: **all voices must share the same rhythmic grid**.
-Beats sliding out of time is the most common problem. These rules prevent it.
-
-### One cycle = one bar
-In Strudel, one cycle = one musical bar. ALL voices share the same cycle length.
-`setcps(78/60/4)` means one cycle = one bar at 78 BPM in 4/4 time.
-
-### All drums on the same .beat() grid
-Use `.beat(positions, 16)` for ALL drum voices. Never mix grid sizes.
-16 steps is the standard grid. Position 0 = beat 1, position 4 = beat 2, etc.
-
-```
-// ✅ CORRECT — all drums on the same 16-step grid
-$kick: sound("bd:1").beat("0,6,10,14", 16).gain(0.6)
-$snare: sound("sd:2").beat("4,12", 16).gain(0.45)
-$hat: sound("hh").beat("0,2,4,6,8,10,12,14", 16).gain(0.2)
-
-// ❌ WRONG — mixed notation = timing drift
-$kick: s("bd ~ ~ bd ~ ~ bd ~").gain(0.6)
-$snare: sound("sd:2").beat("4,12", 16).gain(0.45)
-```
-
-### Bass aligns to the cycle, no .slow()
-Write bass with 4 or 8 events per cycle. Use rests (~) for gaps. Never use .slow() on bass.
-
-```
-// ✅ CORRECT — 8 events = one bar of sixteenth notes
-$bass: note("C2 ~ C2 ~ Eb2 ~ F2 ~").sound("triangle").lpf(350).gain(0.4)
-
-// ❌ WRONG — .slow(2) makes bass take 2 bars while drums take 1 = drift
-$bass: note("C2 ~ C2 ~ Eb2 ~ F2 ~").sound("triangle").slow(2).gain(0.4)
-```
-
-### Chords use angle brackets for bar-by-bar stepping
-`<>` steps through one value per cycle, naturally aligning to bars.
-
-```
-// ✅ CORRECT — one chord per bar, perfectly aligned
-$chord: chord("<Cm7 Fm7 G#maj7 G7>").voicing().sound("sawtooth").lpf(1200).gain(0.3)
-
-// ❌ WRONG — 3 chords + .slow(4) = chords drift against 4/4 drums
-$chord: chord("<Cm7 Fm7 G7>").voicing().sound("sawtooth").slow(4).gain(0.3)
-```
-
-### Same swing on all voices
-If using swing, apply the SAME `.swing()` value to every voice that needs it.
-Mismatched swing values between voices = flamming and drift.
-
-### 16-Step Grid Quick Reference
-
-```
-Position:  0  1  2  3  4  5  6  7  8  9  10 11 12 13 14 15
-Beat:      1  e  &  a  2  e  &  a  3  e  &  a  4  e  &  a
-
-Four on the floor:  0,4,8,12          (kick every beat)
-Backbeat:           4,12              (snare on 2 and 4)
-Offbeat:            2,6,10,14         (& of each beat)
-Eighth notes:       0,2,4,6,8,10,12,14
-Tresillo:           0,3,6,10          (Latin clave base)
-```
-
----
-
 ## Rhythm
 
 ### What is rhythm?
@@ -77,36 +12,31 @@ Rhythm is the pattern of sounds and silences in time. It's the skeleton of music
 
 ### Subdivision
 - A beat can be divided: halves (eighth notes), quarters (sixteenth notes), thirds (triplets).
-- In a 16-step grid: positions 0,4,8,12 = quarter notes. Even positions = eighth notes. All 16 = sixteenth notes.
-- Mixing subdivisions creates interest — kick on quarters (0,4,8,12) with hats on eighths (0,2,4,6,8,10,12,14).
+- Sixteenth notes ("hh*16") give energy. Eighth notes ("hh*8") are more relaxed.
+- Mixing subdivisions creates interest — a kick on quarters with hats on sixteenths.
 
 ### The kick-snare relationship
 - **Kick** provides the low-end pulse. Where the kick hits defines the groove's character.
-- **Snare/clap** is the backbeat — on beats 2 and 4 (steps 4 and 12 in a 16-step grid).
-- Four-on-the-floor: kick on 0,4,8,12. Foundation of house/techno.
-- Breakbeat: kick on 0,6,10 or 0,5,10,14. Syncopated. Foundation of hip-hop.
-- Half-time: kick on 0, snare on 12 (or 8). DnB, trip hop.
+- **Snare/clap** is the backbeat — usually on beats 2 and 4 (steps 4 and 12 in a 16-step grid).
+- Four-on-the-floor: kick on every beat (0,4,8,12). Foundation of house/techno.
+- Breakbeat: kick pattern is irregular, syncopated. Foundation of hip-hop/jungle.
 
 ### Swing and groove
 - **Straight** timing = robotic, precise. Good for techno.
 - **Swing** pushes offbeat notes late, creating a human feel. Essential for jazz, soul, lo-fi.
-- .swing(0.1) = subtle warmth. .swing(0.2) = lo-fi groove. .swing(0.3) = heavy jazz swing.
-- CRITICAL: Apply the same .swing() value to ALL voices. Mismatched swing = flamming.
+- .swing(0.1) = subtle warmth. .swing(0.3) = heavy jazz swing.
 - Ghost notes (very quiet hits) add pocket and feel. Use low .gain() values (0.05-0.15).
 
 ### Syncopation
 - Notes that land BETWEEN the main beats. Creates tension and movement.
 - Example: kick on step 6 instead of 8 — pushes the groove forward.
-- In 16-step grid, odd positions (1,3,5,7,9,11,13,15) are syncopated positions.
-- Too much syncopation = chaotic. Balance syncopated elements with steady ones (backbeat on 4,12).
+- Too much syncopation = chaotic. Balance syncopated elements with steady ones.
 
 ### Space and silence
 - What you DON'T play is as important as what you play.
 - .degradeBy() creates musical space by randomly dropping notes.
-- Fewer beat positions = more space. Compare kick on "0,4,8,12" (dense) vs "0,10" (spacious).
+- Leave gaps in patterns — "bd ~ ~ bd ~ ~ bd ~" breathes more than "bd bd bd bd".
 - Silence before a drop makes the drop hit harder.
-
----
 
 ## Harmony
 
@@ -121,7 +51,6 @@ Rhythm is the pattern of sounds and silences in time. It's the skeleton of music
 - **Major** scales = bright, uplifting. Good for soul, pop.
 - **Dorian** = minor but with a brighter 6th. Jazz, neo-soul, chill.
 - **Pentatonic** = 5-note scale, almost impossible to sound bad. Safe choice.
-- **Phrygian** = dark, Spanish/Middle Eastern flavor. Good for dark techno.
 
 ### Chord progressions
 - A **chord** is 3+ notes played together. Chords create the emotional landscape.
@@ -131,12 +60,10 @@ Rhythm is the pattern of sounds and silences in time. It's the skeleton of music
   - ii-V-I (Dm7 → G7 → Cmaj7) — the jazz standard.
   - I-vi-IV-V (C → Am → F → G) — pop/soul.
   - i-iv-v (Cm → Fm → Gm) — minor loop, lo-fi/ambient.
-  - i-VI-III-VII (Cm → Ab → Eb → Bb) — lo-fi/neo-soul classic loop.
 - **Slow chord movement**: change chords every 2-4 bars for ambient/lo-fi. Every bar for jazz.
-- Always use angle brackets `<>` to step through chords one per cycle (one per bar).
 
 ### Chord probability — what real songs do
-Based on analysis of thousands of popular songs, here's what chords typically follow each other:
+Based on analysis of thousands of popular songs, here's what chords typically follow each other. Use this to make progressions that feel natural or deliberately surprising:
 
 - After **I**: IV (22%), V (19%), vi (15%), ii (8%). The I→IV→V→I cycle is the backbone of pop.
 - After **IV**: I (32%), V (29%), vi (10%). The IV chord almost always resolves to I or V.
@@ -144,15 +71,12 @@ Based on analysis of thousands of popular songs, here's what chords typically fo
 - After **vi**: IV (26%), V (18%), ii (12%), I (11%). Minor chords love moving to IV.
 - After **ii**: V (48%), IV (14%), I (10%). The ii→V is by far the most common two-chord motion.
 
-Follow high-probability paths for "safe" progressions. Pick low-probability paths for unexpected movement.
+**Using this**: Follow the high-probability paths for "safe" progressions. Deliberately pick low-probability paths (3-5%) for interesting, unexpected movement. Genre matters — jazz uses ii→V→I constantly, while lo-fi often loops i→iv or i→VI→III→VII.
 
 ### Bass and root movement
 - The **bass note** anchors the harmony. Usually plays the root of the chord.
 - Walking bass: moves stepwise through chord tones. Keeps energy flowing.
 - Pedal bass: stays on one note while chords change above. Creates tension.
-- Bass patterns use 4 or 8 events per cycle. No .slow() on bass lines.
-
----
 
 ## Arrangement & Dynamics
 
@@ -189,8 +113,6 @@ Follow high-probability paths for "safe" progressions. Pick low-probability path
 - Drums: kick 0.5-0.7, snare 0.3-0.5, hats 0.1-0.3.
 - Bass: 0.3-0.5. Chords/pads: 0.2-0.4. Melody: 0.15-0.3.
 - The quietest element often adds the most character (ghost notes, textures, subtle delays).
-
----
 
 ## Live Coding Mindset
 

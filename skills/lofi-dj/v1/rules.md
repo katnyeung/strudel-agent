@@ -45,8 +45,8 @@ dropped beat.
 
 ## Harmonic Rules
 - **Scales**: minor, dorian, minor7, "minor pentatonic"
-- **Keys**: C, Eb, F, Ab preferred (flat keys feel warmer)
-- **Chords**: 7ths always. 9ths sometimes. Never bare triads.
+- **Keys**: C minor, F minor, D minor, A minor preferred (warm keys — ONLY use natural-note chord roots that work with .voicing())
+- **Chords**: 7ths always. 9ths sometimes. Never bare triads. Chord roots MUST be natural notes only (C, D, E, F, G, A, B) — never use sharps or flats as chord roots.
 - **Movement**: Slow. 2-4 chord progressions over 2-4 bars.
 
 ## Effects Philosophy
@@ -69,3 +69,11 @@ dropped beat.
 - No major keys (too happy — this is melancholy)
 - No sudden changes (everything fades in and out)
 - No kick on step 14 or 15 wrapping to 0 (causes lost-beat feel)
+
+## Vocal Treatment
+When a vocal sample is loaded via `samples()`, use `s("vocal")` with these effects:
+- `.chop(8)` — slice into rhythmic fragments for a tape-chopped feel
+- `.lpf(1200)` — warm low-pass to sit in the lo-fi mix
+- `.room(0.5).delay(0.25)` — add space without washing out
+- `.gain(0.15)` to `.gain(0.25)` — subtle, never dominate
+- Think vinyl sample, tape warble — the vocal should feel found, not performed

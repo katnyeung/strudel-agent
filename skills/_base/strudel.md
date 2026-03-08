@@ -45,16 +45,39 @@ $bass: note("C2 ~ Eb2 ~").sound("triangle").lpf(350).gain(0.4)
 $bass: note("C2 ~ C2 ~ Eb2 ~ F2 ~").sound("triangle").slow(2).lpf(350).gain(0.4)
 ```
 
+### Rule 2b: Melody/arp notes MUST use power-of-2 event counts
+Melody and arp patterns must have exactly 1, 2, 4, 8, or 16 events per cycle.
+These are the only counts that align to a 16-step drum grid.
+Use rests (~) to fill slots and create rhythm. Do NOT use odd counts like 3, 5, 6, 7, 9.
+
+```
+// ✅ CORRECT — 8 events (notes + rests) = aligned to 16-step grid
+$melody: note("C4 ~ E4 ~ G4 ~ E4 ~").sound("sawtooth").lpf(1500).gain(0.3)
+
+// ✅ CORRECT — 4 events = one note per beat
+$melody: note("C4 E4 G4 C5").sound("sawtooth").lpf(1500).gain(0.3)
+
+// ❌ WRONG — 9 events = each note is 1/9 of a cycle, drifts against 16-step drums
+$melody: note("C4 D4 E4 F4 G4 A4 B4 C5 G4").sound("sawtooth").lpf(1500).gain(0.3)
+
+// ❌ WRONG — 5 events = each note is 1/5 of a cycle, misaligned
+$melody: note("C4 E4 G4 B4 C5").sound("sawtooth").lpf(1500).gain(0.3)
+```
+
+If you have more notes than fit in a power-of-2, either:
+- Use angle brackets to spread across bars: note("<C4 E4 G4 C5> <E4 G4 B4 E5>")
+- Use 16 events with rests: note("C4 ~ E4 ~ G4 ~ B4 ~ C5 ~ B4 ~ G4 ~ E4 ~")
+
 ### Rule 3: Chords use .slow(N) ONLY with exactly N chord events
 If you use .slow(4), the pattern MUST have exactly 4 chord events.
 Each event plays for exactly one bar.
 
 ```
 // ✅ CORRECT — 4 chords + .slow(4) = one chord per bar for 4 bars
-$chord: chord("<Cm7 Fm7 Abmaj7 G7>").voicing().sound("sawtooth").slow(4).lpf(1200).gain(0.3)
+$chord: chord("<Cm7 Fm7 Am7 G7>").voicing().sound("sawtooth").slow(4).lpf(1200).gain(0.3)
 
 // ✅ ALSO CORRECT — angle brackets step one per cycle, no .slow() needed
-$chord: chord("<Cm7 Fm7 Abmaj7 G7>").voicing().sound("sawtooth").lpf(1200).gain(0.3)
+$chord: chord("<Cm7 Fm7 Am7 G7>").voicing().sound("sawtooth").lpf(1200).gain(0.3)
 
 // ❌ WRONG — 3 chords + .slow(4) = chords drift against 4/4 drums
 $chord: chord("<Cm7 Fm7 G7>").voicing().sound("sawtooth").slow(4).lpf(1200).gain(0.3)
@@ -66,10 +89,10 @@ Combine with slow() only when the count matches.
 
 ```
 // One chord per bar, cycles through 4 bars:
-$chord: chord("<Cm7 Fm7 Abmaj7 G7>").voicing().sound("sawtooth").lpf(1200).gain(0.3)
+$chord: chord("<Cm7 Fm7 Am7 G7>").voicing().sound("sawtooth").lpf(1200).gain(0.3)
 
 // One bass note per bar:
-$bass: note("<C2 F2 Ab2 G2>").sound("triangle").lpf(350).gain(0.4)
+$bass: note("<C2 F2 G#2 G2>").sound("triangle").lpf(350).gain(0.4)
 ```
 
 ### Rule 5: Never use .slow() or .fast() on drum voices
@@ -97,16 +120,16 @@ $bass: note("C2 ~ C2 ~").sound("triangle").lpf(350).gain(0.4)
 $kick: sound("bd:1").beat("0,4,8,12", 16).gain(0.6)
 
 // ✅ GOOD — chords cycle every 4 bars, bass varies every 2 bars, drums constant
-$chord: chord("<Cm7 Fm7 Abmaj7 G7>").voicing().sound("sawtooth").lpf(1200).gain(0.3)
+$chord: chord("<Cm7 Fm7 Am7 G7>").voicing().sound("sawtooth").lpf(1200).gain(0.3)
 $bass: note("<C2 ~ C2 ~ Eb2 ~ F2 ~ C2 ~ Eb2 ~ G2 ~ F2 ~>").sound("triangle").lpf(350).gain(0.4)
 $kick: sound("bd:1").beat("0,4,8,12", 16).gain(0.6)
-$hat: sound("hh").beat("0,2,4,6,8,10,12,14", 16).gain(rand.range(0.1, 0.25))
+$hat: sound("hh").beat("0,2,4,6,8,10,12,14", 16).gain(perlin.range(0.1, 0.25))
 ```
 
 Techniques to avoid the reset feeling:
 - Use <> angle brackets with different numbers of alternatives per voice
 - Add .degradeBy() to create randomness that masks loop boundaries
-- Use rand.range() on gain/pan so each cycle sounds slightly different
+- Use perlin.range() on gain/pan so each cycle sounds slightly different (smooth noise, no NaN at cycle boundaries)
 - Use .every(N, fn) to apply changes at different intervals per voice
 - Use .sometimesBy() for probabilistic variation
 
@@ -161,20 +184,20 @@ identical kick pattern every cycle makes the reset audible. Use randomness to
 blur the boundary so each cycle sounds slightly different.
 
 Techniques:
-- **Gain variation**: `.gain(rand.range(0.45, 0.65))` — each hit at slightly
-  different volume. The loop point disappears because no two cycles sound the same.
+- **Gain variation**: `.gain(perlin.range(0.45, 0.65))` — smooth noise so each hit
+  has slightly different volume. Use perlin (not rand) to avoid NaN at cycle boundaries.
 - **Ghost kicks**: Add a second quiet kick voice on off-positions with
   `.degradeBy(0.5)` so it only appears half the time, filling gaps organically.
 - **degradeBy on non-essential hits**: `.degradeBy(0.1)` on the main pattern
   occasionally drops a hit, breaking the mechanical loop feel.
-- **Filter variation**: `.lpf(rand.range(800, 2000))` — timbral changes per hit.
+- **Filter variation**: `.lpf(perlin.range(800, 2000))` — timbral changes per hit.
 
 ```
-// ✅ Main kick with gain randomness
-$kick: sound("bd:2").beat("0,4,8,11", 16).bank("RolandTR808").gain(rand.range(0.45, 0.65)).lpf(sine.range(800, 2500).slow(8)).swing(0.2)
+// ✅ Main kick with gain variation (perlin = smooth noise, no AudioParam errors)
+$kick: sound("bd:2").beat("0,4,8,11", 16).bank("RolandTR808").gain(perlin.range(0.45, 0.65)).lpf(sine.range(800, 2500).slow(8)).swing(0.2)
 
 // ✅ Ghost kicks filling the biggest gaps — quiet, probabilistic
-$kickghost: sound("bd:2").beat("2,9,14", 16).bank("RolandTR808").gain(rand.range(0.15, 0.25)).degradeBy(0.5).lpf(800).swing(0.2)
+$kickghost: sound("bd:2").beat("2,9,14", 16).bank("RolandTR808").gain(perlin.range(0.15, 0.25)).degradeBy(0.5).lpf(800).swing(0.2)
 ```
 
 Ghost kick placement: put ghost hits in the MIDDLE of the widest gaps in
@@ -217,6 +240,18 @@ Combine with gain randomness on the main kick for maximum loop-point masking.
 - .voicing() spreads notes across octaves naturally.
 - Use angle brackets to step one chord per cycle: chord("<Dm7 G7 Cmaj7 Am7>")
 - .dict('ireal') — use iReal Pro voicing dictionary for jazz chords.
+- **CRITICAL: .voicing() chord roots — ONLY use these 7 natural notes:**
+  **C, D, E, F, G, A, B** — these ALWAYS work with .voicing().
+  All sharps and flats (C#, Db, D#, Eb, F#, Gb, G#, Ab, A#, Bb) are UNRELIABLE and may produce "[voicing]: unknown chord" errors.
+  - ❌ BROKEN: D#maj7, A#maj7, G#maj7, Abmaj7, Ebmaj7, Bbmaj7, C#m7, F#m7
+  - ✅ SAFE: Cm7, Dm7, Em7, Fm7, Gm7, Am7, Bm7, Cmaj7, Fmaj7, Gmaj7
+  - ALWAYS pick a key whose chords use only natural roots: C minor, D minor, F minor, G minor, A minor
+  - Example progressions:
+    - C minor: chord("<Cm7 Fm7 G7 Cm7>")
+    - F minor: chord("<Fm7 Cm7 G7 Am7>")
+    - A minor: chord("<Am7 Dm7 G7 Cmaj7>") — classic ii-V-I
+    - D minor: chord("<Dm7 Gm7 Am7 Dm7>")
+  - NEVER use accidentals (sharps/flats) as chord roots with .voicing(). Transpose to a natural-root key instead.
 
 ## Drums & Samples
 
@@ -276,8 +311,8 @@ $rim: sound("rim").beat("4,10,14", 16).gain(0.15)              // syncopated rim
 ### .beat() with variation
 ```
 // Change hits every other bar using angle brackets:
-$kick: sound("bd:1").beat("<0,4,8,12 0,4,6,10,12>", 16).gain(0.6)
-$hat: sound("hh").beat("0,2,4,6,8,10,12,14", 16).gain(rand.range(0.1, 0.25))
+$kick: sound("bd:1").beat("<0,4,8,12 0,4,6,10,14>", 16).gain(0.6)
+$hat: sound("hh").beat("0,2,4,6,8,10,12,14", 16).gain(perlin.range(0.1, 0.25))
 ```
 
 ### Mini-notation (use for melodic patterns, ambience, or experimental)
@@ -530,7 +565,7 @@ The ducking voice triggers the effect; the target orbit's volume pumps.
 - .rarely(fn) — ~10% chance. .sometimes(fn) — ~50% chance. .often(fn) — ~75% chance.
 - .almostNever(fn) — even sparser than .rarely(). ~5-10% probability. Great for rare glitches.
   Example: .almostNever(ply("<2 4>")) — very occasionally double or quadruple a hit.
-- rand — random 0-1 each cycle. rand.range(0.2, 0.8) — random in range.
+- rand — random 0-1 each cycle. rand.range(0.2, 0.8) — random in range. ⚠️ Do NOT use rand.range() on AudioParam values (gain, lpf, pan) — can produce NaN at cycle boundaries. Use perlin.range() for audio params instead.
 - irand(N) — random integer 0 to N-1.
 - perlin — smooth Perlin noise (0-1). perlin.range(lo,hi).slow(N) — smooth random drift.
 - sine.range(lo,hi).slow(N) — smooth sine LFO oscillation.
@@ -695,14 +730,16 @@ Effects are applied in this order (knowing this helps avoid surprises):
 - First line: setcps(N) to set tempo.
 - Each subsequent line: one named voice ($name: pattern).
 - No stack(), no variables, no comments in output code, no semicolons.
+- NEVER use the pipe character `|` inside patterns. `|` is NOT valid Strudel mini-notation. Use spaces to separate events within angle brackets: `note("<C2 ~ E2 ~ G2 ~ F2 ~>")` NOT `note("<C2 ~ E2 ~ | G2 ~ F2 ~>")`.
 - All parentheses must be matched.
 - All drum voices use .beat() with the SAME step count (16).
 - .beat() positions must be 0 to N-1. NEVER use position N (e.g. step 16 in a 16-step grid = step 0, causes double-hit).
+- Avoid placing a kick hit on step 12 when you also hit step 0 — the 12→0 gap (4 steps) combined with cycle-boundary scheduling can cause audible double-triggers. Prefer step 14 for the last syncopated kick: e.g. `"0,4,6,10,14"` not `"0,4,6,10,12"`.
 - All melodic/bass patterns use the same number of events or angle brackets.
 - Bass patterns: 4 or 8 events per cycle, NO .slow(). One bar per cycle.
 - Chord patterns: use <> angle brackets for one chord per cycle. Use .slow(N) ONLY if exactly N chords.
 - STAGGER loop lengths: chords cycle over 4 bars, bass varies over 2 bars, add .degradeBy() and rand for variety.
-- Use .gain(rand.range()) on drum voices to mask loop boundaries — strict repetition exposes the reset point.
+- Use .gain(perlin.range()) on drum voices to mask loop boundaries — strict repetition exposes the reset point. NEVER use rand.range() on AudioParam values (gain, lpf, pan) — it produces NaN at cycle boundaries causing double-triggers. Use perlin.range() instead (smooth noise, always finite).
 - register() custom functions go at the very top, before setcps().
 - Voice muting: prefix with _$ instead of $ to mute a voice without deleting it.
   _$kick: sound("bd").beat("0,4,8,12", 16) — this voice is muted but preserved.

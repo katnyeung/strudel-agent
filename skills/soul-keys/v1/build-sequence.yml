@@ -4,17 +4,17 @@ steps:
   - stage: foundation
     description: "Rich chord progression on Rhodes-like sound"
     code: |
-      $keys: chord("<Ebmaj7 Abmaj7 Fm7 Bb7>").voicing().sound("sawtooth").slow(4).lpf(1200).room(0.6).gain(0.35)
+      $keys: chord("<Fmaj7 Cmaj7 Dm7 G7>").voicing().sound("sawtooth").slow(4).lpf(1200).room(0.6).gain(0.35)
 
   - stage: bass
     description: "Walking bass through chord tones"
     code: |
-      $bass: note("Eb2 ~ F2 G2 ~ Ab2 G2 ~").sound("triangle").lpf(400).gain(0.45)
+      $bass: note("F2 ~ G2 A2 ~ C3 A2 ~").sound("triangle").lpf(400).gain(0.45)
 
   - stage: groove
     description: "Laid-back drum groove"
     code: |
-      $kick: sound("bd:1").beat("0,6,10,12",16).bank("RolandTR808").swing(0.2).gain(0.5).lpf(1800)
+      $kick: sound("bd:1").beat("0,6,10,14",16).bank("RolandTR808").swing(0.2).gain(0.5).lpf(1800)
 
   - stage: snare
     description: "Snare with ghost notes"
